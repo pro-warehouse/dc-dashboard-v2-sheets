@@ -5025,6 +5025,38 @@
                     shipQ: imported204.shipQ,
                     pieces: imported204.pieces,
                   });
+                  
+                  // 🟢 ฟีเจอร์ใหม่: ปิดงานอัตโนมัติถ้ายอดชิ้นเป็น 0
+                  if (imported204.pieces === 0) {
+                    let autoClosed = false;
+                    const ts = Date.now();
+                    const actualDateObj = new Date(ts);
+                    const actualTime = actualDateObj.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', hour12: false });
+                    
+                    // ปิดสเตป 1-4 ให้เป็น done อัตโนมัติ (จ่ายงาน, พิมพ์, หยิบ, QC)
+                    ['allocate', 'print', 'pick', 'check'].forEach(stepKey => {
+                      const step = w.steps.find(s => s.key === stepKey);
+                      if (step && step.status !== 'done') {
+                        step.status = 'done';
+                        step.actualDateObj = actualDateObj;
+                        step.actualTime = actualTime;
+                        step.actionUser = 'System (Auto)'; // สแตมป์ชื่อระบบ
+                        step._dirty = true;
+                        
+                        localStorage.setItem(`wave_${w.rowKey}_${stepKey}_status`, 'done');
+                        localStorage.setItem(`wave_${w.rowKey}_${stepKey}_time`, actualTime);
+                        localStorage.setItem(`wave_${w.rowKey}_${stepKey}_ts`, ts);
+                        localStorage.setItem(`wave_${w.rowKey}_${stepKey}_user`, 'System (Auto)');
+                        autoClosed = true;
+                      }
+                    });
+                    
+                    if (autoClosed) {
+                      // แสตมป์ลงประวัติการทำงาน (Logs)
+                      this.addLog(w.id, 'AUTO-CLOSE', 'ปิดงานโดยระบบ (ยอดชิ้นเป็น 0)');
+                    }
+                  }
+
                   wavesToUpdateDB.push(w);
                 }
               });
