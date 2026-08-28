@@ -445,26 +445,87 @@ app.post('/api/waves/bulk-insert', async (req, res) => {
   }
 });
 
-// API สำหรับ Import 204 (Frontend เป็นคนเซฟลงตารางหลักให้แล้ว แค่ตอบรับเฉยๆ)
+// === 2. API สำหรับ Import 204 (บันทึกข้อมูล 204 ลง Google Sheets) ===
 app.post('/api/wms-204/bulk', async (req, res) => {
   try {
-    return res.json({ success: true, message: 'รับข้อมูล 204 สำเร็จ' });
+    if (!isSheetsDbConfigured) return res.json({ success: true });
+
+    const records = req.body.records;
+    if (!records || records.length === 0) return res.json({ success: true });
+
+    // ดึงข้อมูลทั้งหมดเพื่อหาตำแหน่งแถวและคอลัมน์
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: DB_SPREADSHEET_ID,
+      range: 'Wave_Monitoring!A:ZZ',
+    });
+    
+    const rows = response.data.values;
+    if (!rows || rows.length === 0) return res.json({ success: true });
+    
+    const headers = rows[0];
+    const updateData = []; 
+
+    const getColLetter = (colIndex) => {
+      let temp, letter = '';
+      while (colIndex >= 0) {
+        temp = colIndex % 26;
+        letter = String.fromCharCode(temp + 65) + letter;
+        colIndex = (colIndex - temp) / 26 - 1;
+      }
+      return letter;
+    };
+
+    // ฟังก์ชันช่วยหา Index ของคอลัมน์
+    const getHeaderIdx = (names) => {
+      for (let name of names) {
+        const idx = headers.findIndex(h => String(h).trim().toLowerCase() === name.toLowerCase());
+        if (idx > -1) return idx;
+      }
+      return -1;
+    };
+
+    // หาตำแหน่งคอลัมน์ของ 204
+    const statusIdx = getHeaderIdx(['WMS_204_Status', 'WMS_Status']);
+    const allocIdx = getHeaderIdx(['WMS_204_Allocated_Qty', 'WMS_Allocated_Qty', 'Allocated_Qty']);
+    const totalIdx = getHeaderIdx(['WMS_204_Total_Qty', 'WMS_Total_Qty', 'Total_Qty']);
+    const displayIdx = getHeaderIdx(['WMS_204_Display_Qty', 'WMS_Display_Qty']);
+
+    records.forEach((rec) => {
+      const targetWaveId = standardizeWaveId(rec.id);
+      
+      // วนลูปหาทุกแถวที่เลข Wave ตรงกัน
+      rows.forEach((row, index) => {
+        if (!row || !row[0]) return;
+        const currentWaveId = standardizeWaveId(row[0]);
+        
+        if (currentWaveId === targetWaveId) {
+          const rowIndex = index + 1;
+          if (rowIndex > 1) {
+            if (statusIdx > -1) updateData.push({ range: `Wave_Monitoring!${getColLetter(statusIdx)}${rowIndex}`, values: [[rec.status || '']] });
+            if (allocIdx > -1) updateData.push({ range: `Wave_Monitoring!${getColLetter(allocIdx)}${rowIndex}`, values: [[rec.allocQ || 0]] });
+            if (totalIdx > -1) updateData.push({ range: `Wave_Monitoring!${getColLetter(totalIdx)}${rowIndex}`, values: [[rec.totalQ || 0]] });
+            if (displayIdx > -1) updateData.push({ range: `Wave_Monitoring!${getColLetter(displayIdx)}${rowIndex}`, values: [[rec.pieces || 0]] });
+          }
+        }
+      });
+    });
+
+    if (updateData.length > 0) {
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: DB_SPREADSHEET_ID,
+        requestBody: {
+          valueInputOption: 'USER_ENTERED',
+          data: updateData,
+        },
+      });
+      console.log(`✅ อัปเดตข้อมูล 204 สำเร็จ: ${updateData.length} เซลล์`);
+    }
+
+    return res.json({ success: true, message: 'บันทึกข้อมูล 204 ลง Google Sheets สำเร็จ' });
   } catch (err) {
+    console.error('❌ อัปเดต 204 ขัดข้อง:', err.message);
     return res.status(500).json({ success: false, message: err.message });
   }
-});
-
-// ==========================================
-// 🚀 API อื่นๆ ยิบย่อย
-// ==========================================
-
-// API ป้องกัน Error จากปุ่มลบข้อมูล
-app.post('/api/waves/delete', async (req, res) => {
-  res.json({ success: true, message: 'ลบข้อมูลเรียบร้อยแล้ว' });
-});
-
-app.post('/api/waves/delete-by-date', async (req, res) => {
-  res.json({ success: true, message: 'ลบข้อมูลตามวันที่เรียบร้อยแล้ว' });
 });
 
 // API สำหรับเก็บและแสดงเวลา Last Sync 204
