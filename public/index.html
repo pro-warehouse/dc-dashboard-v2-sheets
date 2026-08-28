@@ -4715,21 +4715,44 @@
           const ws = XLSX.utils.json_to_sheet([
             {
               Wave_Number: '0000051678',
-              Trip_No: '1', // <--- เพิ่มบรรทัดนี้
-              Order_Number: '4106839790',
+              Trip_No: '1', 
               Planned_Pick_Date: '2026-05-16',
+              Planned_Pick_Time: '01:00',
               Planned_Load_Date: '2026-05-16',
               Planned_Load_Time: '03:00',
-              Owner_Code: '1115',
-              Branch_Code: 'ZC008',
-              Branch_Name: 'OLP-LPG-ลาดกระบัง 4 (ถ.เจ้าคุณทหาร)',
-              Is_HUB: '',
-              Order_Type: '',
+              Vehicle_Booking_No: 'B001-260552771',
               Transporter: '2PT',
               Vehicle_Type: '4W',
-              Vehicle_Booking_No: 'B001-260552771',
+              Owner_Code: 'DM02',
+              Total_Qty: '150',
+              Order_Number: '4106839790',
+              Branch_Code: 'ZC008',
+              Branch_Name: 'OLP-LPG-ลาดกระบัง 4 (ถ.เจ้าคุณทหาร)',
+              Order_Type: 'Normal',
+              Is_HUB: 'N'
             },
           ]);
+          
+          // ปรับความกว้างของคอลัมน์ให้สวยงามอ่านง่าย
+          ws['!cols'] = [
+            { wch: 15 }, // Wave_Number
+            { wch: 8 },  // Trip_No
+            { wch: 18 }, // Planned_Pick_Date
+            { wch: 18 }, // Planned_Pick_Time
+            { wch: 18 }, // Planned_Load_Date
+            { wch: 18 }, // Planned_Load_Time
+            { wch: 20 }, // Vehicle_Booking_No
+            { wch: 12 }, // Transporter
+            { wch: 12 }, // Vehicle_Type
+            { wch: 12 }, // Owner_Code
+            { wch: 10 }, // Total_Qty
+            { wch: 15 }, // Order_Number
+            { wch: 12 }, // Branch_Code
+            { wch: 35 }, // Branch_Name
+            { wch: 12 }, // Order_Type
+            { wch: 8 },  // Is_HUB
+          ];
+
           const wb = XLSX.utils.book_new();
           XLSX.utils.book_append_sheet(wb, ws, 'ImportPlan');
           XLSX.writeFile(wb, 'Wave_Plan_Template.xlsx');
