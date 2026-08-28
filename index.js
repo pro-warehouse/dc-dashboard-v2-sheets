@@ -4,27 +4,6 @@ const { google } = require('googleapis');
 const path = require('path');
 const fs = require('fs');
 
-const MAX_REASONABLE_WAVE_QTY = 1000000;
-
-function standardizeWaveId(id) {
-  if (!id) return '';
-  const num = String(id).replace(/^WAVE-?/i, '').replace(/^W-?/i, '').replace(/^0+/, '');
-  const paddedNum = (num === '' ? '0' : num).padStart(10, '0');
-  return `Wave-${paddedNum}`;
-}
-
-function parseNumericQty(value) {
-  if (value === null || value === undefined) return 0;
-  if (typeof value === 'number') return Math.abs(Math.round(value)) <= MAX_REASONABLE_WAVE_QTY ? Math.round(value) : 0;
-  const cleaned = String(value).replace(/,/g, '').replace(/\s/g, '').replace(/[^\d.-]/g, '');
-  const parsed = Number(cleaned);
-  return Number.isFinite(parsed) && Math.abs(Math.round(parsed)) <= MAX_REASONABLE_WAVE_QTY ? Math.round(parsed) : 0;
-}
-
-function getWaveNumberNoZero(id) {
-  return String(id ?? '').replace(/^WAVE-?/i, '').replace(/^W-?/i, '').replace(/^0+/, '') || '0';
-}
-
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -34,14 +13,12 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ==========================================
-// ⚙️ การตั้งค่า Google Sheets เป็น Database
+// ⚙️ การตั้งค่า Google Sheets
 // ==========================================
+const DB_SPREADSHEET_ID = '1TL-tj-BrvYM7i_wNHlA0x641_VOqfT9SLpmm2NZATOo';
 const keyFilePath = path.join(__dirname, 'key.json');
 let sheets = null;
-let isSheetsConfigured = false;
-
-// ⚠️ ใช้ SPREADSHEET_ID ของคุณ
-const SPREADSHEET_ID = '1TL-tj-BrvYM7i_wNHlA0x641_VOqfT9SLpmm2NZATOo';
+let isSheetsDbConfigured = false;
 
 if (fs.existsSync(keyFilePath)) {
   const sheetsAuth = new google.auth.GoogleAuth({
@@ -49,27 +26,16 @@ if (fs.existsSync(keyFilePath)) {
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });
   sheets = google.sheets({ version: 'v4', auth: sheetsAuth });
-  isSheetsConfigured = true;
+  isSheetsDbConfigured = true;
   console.log('✅ โหลดการตั้งค่า Google Sheets สำเร็จ');
+  initSheetsHeaders(); // สร้างหัวตารางอัตโนมัติ
 } else {
-  console.warn('⚠️ ไม่พบไฟล์ key.json ระบบจะทำงานผ่าน Memory ชั่วคราว');
+  console.warn('⚠️ ไม่พบไฟล์ key.json ระบบอาจทำงานไม่สมบูรณ์');
 }
 
 // ==========================================
-// 🛠️ Google Sheets Helper Functions
+// 🛠️ ฟังก์ชันตั้งค่าตาราง & Helper
 // ==========================================
-const WAVES_HEADERS = [
-  'Wave_Number', 'Planned_Pick_Date', 'Planned_Pick_Time', 'Planned_Load_Date', 'Planned_Load_Time', 
-  'Trip_No', 'Transporter', 'Vehicle_Type', 'Vehicle_Booking_No', 'Branch_Name', 'Branch_Code', 
-  'Order_Number', 'Owner_Code', 'Order_Type', 'Is_HUB', 'Time_Change_Count', 'Total_Qty', 
-  'Status_Allocate', 'User_Allocate', 'Time_Allocate', 
-  'Status_Print', 'User_Print', 'Time_Print', 
-  'Status_Pick', 'User_Pick', 'Picked_Complete_Timestamp', 
-  'Status_Check', 'User_Check', 'QC_Complete_Timestamp', 
-  'Status_Truck', 'User_Truck', 'Hist_Truck_Time', 
-  'Status_Load', 'User_Load', 'Hist_Load_Time', 'Time_Load_Start', 'Dock_Door', 'License_Plate', 'Is_Urgent'
-];
-
 const SUMMARY_HEADERS = [
   'Wave_Number', 'Planned_Load_Date', 'Planned_Load_Time', 'Transporter', 'Vehicle_Type', 'Owner_Code', 'Total_Qty',
   'Allocate_Status', 'Allocate_OnTime',
@@ -80,395 +46,566 @@ const SUMMARY_HEADERS = [
   'Load_Status', 'Load_OnTime'
 ];
 
-async function readSheet(sheetName, headersList) {
-  if (!isSheetsConfigured) return [];
+async function initSheetsHeaders() {
+  if (!isSheetsDbConfigured) return;
   try {
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
-      range: `${sheetName}!A:ZZ`,
-    });
-    const rows = res.data.values;
-    if (!rows || rows.length < 2) return [];
-    
-    const actualHeaders = rows[0];
-    return rows.slice(1).map(row => {
-      let obj = {};
-      actualHeaders.forEach((h, i) => {
-        obj[h] = row[i] !== undefined ? row[i] : null;
+    const waveHeaders = [
+      'Wave_Number', 'Planned_Pick_Date', 'Planned_Pick_Time', 'Planned_Load_Date', 'Planned_Load_Time',
+      'Trip_No', 'Transporter', 'Vehicle_Type', 'Vehicle_Booking_No', 'Branch_Name', 'Branch_Code',
+      'Order_Number', 'Owner_Code', 'Order_Type', 'Is_HUB', 'Time_Change_Count', 'Total_Qty',
+      'Status_Allocate', 'User_Allocate', 'Time_Allocate',
+      'Status_Print', 'User_Print', 'Time_Print',
+      'Status_Pick', 'User_Pick', 'Picked_Complete_Timestamp',
+      'Status_Check', 'User_Check', 'QC_Complete_Timestamp',
+      'Status_Truck', 'User_Truck', 'Hist_Truck_Time',
+      'Status_Load', 'User_Load', 'Hist_Load_Time', 'Time_Load_Start', 'Dock_Door', 'License_Plate',
+      'Created_At', 'Imported_At'
+    ];
+    const logHeaders = ['timestamp', 'user', 'waveId', 'action'];
+
+    const checkAndSetHeaders = async (sheetName, headers) => {
+      const res = await sheets.spreadsheets.values.get({
+        spreadsheetId: DB_SPREADSHEET_ID,
+        range: `${sheetName}!A1:ZZ1`,
       });
-      return obj;
-    });
-  } catch (err) {
-    console.warn(`⚠️ อ่านแผ่นงาน ${sheetName} ไม่สำเร็จ`);
-    return [];
+      if (!res.data.values || res.data.values.length === 0) {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: DB_SPREADSHEET_ID,
+          range: `${sheetName}!A1`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [headers] },
+        });
+        console.log(`✅ สร้างหัวตารางสำหรับ ${sheetName} สำเร็จ`);
+      }
+    };
+
+    await checkAndSetHeaders('Wave_Monitoring', waveHeaders);
+    await checkAndSetHeaders('System_Logs', logHeaders);
+    await checkAndSetHeaders('Dashboard_Summary', SUMMARY_HEADERS); // สร้างหัวตาราง Dashboard_Summary
+  } catch (error) {
+    console.error('❌ ตรวจสอบหัวตาราง Google Sheets ไม่สำเร็จ:', error.message);
   }
 }
 
-async function writeSheet(sheetName, objectsArray, headersList) {
-  if (!isSheetsConfigured) return;
-  try {
-    const values = [headersList];
-    objectsArray.forEach(obj => {
-      values.push(headersList.map(h => obj[h] !== undefined && obj[h] !== null ? String(obj[h]) : ''));
-    });
-
-    await sheets.spreadsheets.values.clear({
-      spreadsheetId: SPREADSHEET_ID,
-      range: `${sheetName}!A1:ZZ`,
-    });
-
-    await sheets.spreadsheets.values.update({
-      spreadsheetId: SPREADSHEET_ID,
-      range: `${sheetName}!A1`,
-      valueInputOption: 'USER_ENTERED',
-      resource: { values },
-    });
-  } catch (err) {
-    console.error(`⚠️ เขียนข้อมูลลง ${sheetName} ไม่สำเร็จ:`, err.message);
-  }
-}
-
-async function appendSheet(sheetName, valuesArray) {
-  if (!isSheetsConfigured) return;
-  try {
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: SPREADSHEET_ID,
-      range: `${sheetName}!A:A`,
-      valueInputOption: 'USER_ENTERED',
-      insertDataOption: 'INSERT_ROWS',
-      resource: { values: valuesArray },
-    });
-  } catch (err) {}
+function standardizeWaveId(id) {
+  if (!id) return '';
+  const num = String(id).replace(/^WAVE-?/i, '').replace(/^W-?/i, '').replace(/^0+/, '');
+  const paddedNum = (num === '' ? '0' : num).padStart(10, '0');
+  return `Wave-${paddedNum}`;
 }
 
 // ==========================================
 // 📊 Dashboard Summary On-Time Logic
 // ==========================================
 async function updateDashboardSummary(dbWaves) {
-  if (!isSheetsConfigured) return;
-  
-  const summaryData = dbWaves.map(w => {
-    let targetMs = null;
-    if (w.Planned_Load_Date) {
-      const timeStr = w.Planned_Load_Time || '00:00';
-      // แปลงเวลาให้เป็น Timestamp (สมมติโซนเวลาไทย +07:00)
-      const d = new Date(`${w.Planned_Load_Date}T${timeStr}:00+07:00`);
-      if(!isNaN(d.getTime())) targetMs = d.getTime();
-    }
+  if (!isSheetsDbConfigured) return;
+  try {
+    const summaryData = dbWaves.map(w => {
+      let targetMs = null;
+      if (w.Planned_Load_Date) {
+        const timeStr = (w.Planned_Load_Time || '00:00').trim();
+        // จัดฟอร์แมตให้เป็น HH:mm:ss
+        const formattedTime = timeStr.length === 5 ? timeStr + ':00' : timeStr;
+        const d = new Date(`${w.Planned_Load_Date}T${formattedTime}+07:00`);
+        if (!isNaN(d.getTime())) targetMs = d.getTime();
+      }
 
-    // เช็ค SLA: ลบเวลาถอยหลังจากเป้าหมายโหลด
-    const checkSLA = (actualTimeStr, minusMins) => {
-      if (!actualTimeStr || actualTimeStr === '-' || actualTimeStr === '') return 'Pending';
-      const actualDate = new Date(actualTimeStr);
-      if (isNaN(actualDate.getTime())) return 'Pending';
-      if (!targetMs) return 'No_Plan'; // ไม่มีเวลาเป้าหมายให้คำนวณ
-      
-      const slaLimitTime = targetMs - (minusMins * 60000);
-      return actualDate.getTime() <= slaTime ? 'On-Time' : 'Late';
-    };
+      // ฟังก์ชันเช็คว่า On-Time หรือ Late
+      const checkSLA = (actualTimeStr, minusMins) => {
+        if (!actualTimeStr || actualTimeStr === '-' || actualTimeStr === '') return 'Pending';
+        const actualDate = new Date(actualTimeStr);
+        if (isNaN(actualDate.getTime())) return 'Pending';
+        if (!targetMs) return 'No_Plan'; // ไม่มีเวลาแผนโหลด
+        
+        const slaLimitTime = targetMs - (minusMins * 60000);
+        return actualDate.getTime() <= slaLimitTime ? 'On-Time' : 'Late';
+      };
 
-    return {
-      Wave_Number: w.Wave_Number,
-      Planned_Load_Date: w.Planned_Load_Date,
-      Planned_Load_Time: w.Planned_Load_Time,
-      Transporter: w.Transporter,
-      Vehicle_Type: w.Vehicle_Type,
-      Owner_Code: w.Owner_Code,
-      Total_Qty: w.Total_Qty,
-      Allocate_Status: w.Status_Allocate,
-      Allocate_OnTime: checkSLA(w.Time_Allocate, 180), // 3 ชั่วโมงก่อนโหลด
-      Print_Status: w.Status_Print,
-      Print_OnTime: checkSLA(w.Time_Print, 120), // 2 ชั่วโมงก่อนโหลด
-      Pick_Status: w.Status_Pick,
-      Pick_OnTime: checkSLA(w.Picked_Complete_Timestamp, 90), // 1.5 ชั่วโมงก่อนโหลด
-      QC_Status: w.Status_Check,
-      QC_OnTime: checkSLA(w.QC_Complete_Timestamp, 30), // 30 นาทีก่อนโหลด
-      Truck_Status: w.Status_Truck,
-      Truck_OnTime: checkSLA(w.Hist_Truck_Time, 15), // รถเข้า 15 นาทีก่อนโหลด
-      Load_Status: w.Status_Load,
-      Load_OnTime: checkSLA(w.Hist_Load_Time, 0) // โหลดเสร็จตรงเวลา
-    };
-  });
+      return [
+        w.Wave_Number || '', w.Planned_Load_Date || '', w.Planned_Load_Time || '', 
+        w.Transporter || '', w.Vehicle_Type || '', w.Owner_Code || '', w.Total_Qty || 0,
+        w.Status_Allocate || '', checkSLA(w.Time_Allocate, 180), // จ่ายงาน (SLA 3 ชม.)
+        w.Status_Print || '', checkSLA(w.Time_Print, 120),       // พิมพ์ LPN (SLA 2 ชม.)
+        w.Status_Pick || '', checkSLA(w.Picked_Complete_Timestamp, 90), // หยิบ (SLA 1.5 ชม.)
+        w.Status_Check || '', checkSLA(w.QC_Complete_Timestamp, 30),    // QC (SLA 30 นาที)
+        w.Status_Truck || '', checkSLA(w.Hist_Truck_Time, 15),          // รถเข้า (SLA 15 นาที)
+        w.Status_Load || '', checkSLA(w.Hist_Load_Time, 0)              // โหลดเสร็จ (SLA 0 นาที)
+      ];
+    });
 
-  await writeSheet('Dashboard_Summary', summaryData, SUMMARY_HEADERS);
-}
+    const values = [SUMMARY_HEADERS, ...summaryData];
 
-// ==========================================
-// การตั้งค่าเริ่มต้น & In-Memory Data
-// ==========================================
-const CURRENT_SHIFT_SETTINGS = { morningStart: '07:00', morningEnd: '16:00', nightStart: '19:00', nightEnd: '04:00' };
-const defaultSettings = { slas: { '4W': 30, '6W': 45, '10W': 60, TRACTOR: 90 }, penaltyRate: 100, shifts: { ...CURRENT_SHIFT_SETTINGS }, maxLimits: { DM02: 35000, DP02: 25000, Other: 100000 } };
-let mockWaves = [];
-const dockOverlay = new Map();
-const liveStatusOverlay = new Map();
-const WMS204_FILE = path.join(__dirname, 'wms204-store.json');
-let wms204Store = { updatedAt: null, rows: {} };
+    // เคลียร์ข้อมูลเก่าก่อนทับใหม่ทั้งหมดเพื่อป้องกันความซ้ำซ้อน
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId: DB_SPREADSHEET_ID,
+      range: `Dashboard_Summary!A1:ZZ`,
+    });
 
-function loadWms204Store() {
-  try { if (fs.existsSync(WMS204_FILE)) wms204Store = JSON.parse(fs.readFileSync(WMS204_FILE, 'utf8')); } catch (err) {}
-}
-function saveWms204Store() {
-  try { fs.writeFileSync(WMS204_FILE, JSON.stringify(wms204Store, null, 2), 'utf8'); } catch (err) {}
-}
-loadWms204Store();
-
-// ==========================================
-// 🚀 API Endpoints
-// ==========================================
-
-let employeeCache = null;
-let lastCacheTime = 0;
-
-app.post('/api/verify-employee', async (req, res) => {
-  const empId = String(req.body.employeeId || '').trim();
-  if (!empId) return res.json({ success: false, message: 'กรุณาระบุรหัสพนักงาน' });
-  if (empId === '171080') return res.json({ success: true, name: 'Jooner' });
-
-  if (isSheetsConfigured) {
-    const now = Date.now();
-    if (!employeeCache || now - lastCacheTime > 3600000) {
-      try {
-        const response = await sheets.spreadsheets.values.get({ spreadsheetId: '1AWOeqhCqmBlSfGI5FWJVU4F77lDGNWBUH-TYpJeiYnI', range: 'บันทึกเวลาทำงาน!B25:C' });
-        if (response.data.values) {
-          employeeCache = {};
-          response.data.values.forEach(row => { if (row[0] && row[1]) employeeCache[String(row[0]).trim()] = String(row[1]).trim(); });
-          lastCacheTime = now;
-        }
-      } catch (err) {}
-    }
-    if (employeeCache && employeeCache[empId]) return res.json({ success: true, name: employeeCache[empId] });
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: DB_SPREADSHEET_ID,
+      range: `Dashboard_Summary!A1`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values },
+    });
+    console.log('✅ อัปเดต Dashboard_Summary (On-Time) สำเร็จ');
+  } catch (err) {
+    console.error('❌ อัปเดต Dashboard_Summary ขัดข้อง:', err.message);
   }
+}
 
-  const backupTeam = { 'EMP01': 'วันดี', 'EMP02': 'จิรวรรณ', 'EMP03': 'ศุภนิดา' };
-  if (backupTeam[empId]) res.json({ success: true, name: backupTeam[empId] });
-  else res.json({ success: false, message: 'ไม่พบรหัสพนักงาน' });
+// ==========================================
+// 🚀 API Endpoints หลัก
+// ==========================================
+
+// 1. API ดึงประวัติ System Logs
+app.get('/api/logs', async (req, res) => {
+  try {
+    if (!isSheetsDbConfigured) return res.json([]);
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: DB_SPREADSHEET_ID,
+      range: 'System_Logs!A:D',
+    });
+    const rows = response.data.values;
+    if (!rows || rows.length <= 1) return res.json([]);
+
+    let logs = rows.slice(1).map(row => ({
+      ts: row[0] || '',
+      user: row[1] || '',
+      waveId: row[2] || '',
+      action: row[3] || ''
+    }));
+    logs = logs.reverse().slice(0, 300); // เอาล่าสุดขึ้นก่อน 300 รายการ
+    res.json(logs);
+  } catch (err) {
+    console.error('❌ ดึง Logs ขัดข้อง:', err.message);
+    res.json([]);
+  }
 });
 
+// 2. API บันทึก System Logs
+app.post('/api/logs/save', async (req, res) => {
+  try {
+    if (!isSheetsDbConfigured) return res.json({ success: true });
+    const rowData = [
+      new Date(req.body.ts).toISOString(),
+      req.body.user || '',
+      req.body.waveId || '',
+      req.body.action || ''
+    ];
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: DB_SPREADSHEET_ID,
+      range: 'System_Logs!A:D',
+      valueInputOption: 'USER_ENTERED',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: { values: [rowData] },
+    });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('❌ บันทึก Log ไม่สำเร็จ:', e.message);
+    res.status(500).json({ success: false });
+  }
+});
+
+// === Helper ดึงข้อมูลจาก Sheets ===
+function parseNumericQty(value) {
+  if (value === null || value === undefined) return 0;
+  const cleaned = String(value).trim().replace(/,/g, '').replace(/\s/g, '');
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? Math.round(parsed) : 0;
+}
+
+async function fetchWaveDataFromSheets() {
+  if (!isSheetsDbConfigured) return [];
+  try {
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: DB_SPREADSHEET_ID,
+      range: 'Wave_Monitoring!A:ZZ',
+    });
+    const rows = response.data.values;
+    if (!rows || rows.length === 0) return [];
+    
+    const headers = rows[0];
+    const data = rows.slice(1).map((row, index) => {
+      let obj = { _rowIndex: index + 2 };
+      headers.forEach((header, i) => {
+        obj[header] = (row[i] !== undefined && row[i] !== '') ? row[i] : null; 
+      });
+      return obj;
+    });
+    return data;
+  } catch (err) {
+    console.error('❌ อ่านข้อมูล Wave_Monitoring ขัดข้อง:', err.message);
+    return [];
+  }
+}
+
+// 3. API โหลดข้อมูล Wave ขึ้นหน้าจอ Dashboard
 app.get('/api/waves/live', async (req, res) => {
   try {
-    let resultData = isSheetsConfigured ? await readSheet('Waves', WAVES_HEADERS) : mockWaves;
+    if (!isSheetsDbConfigured) return res.json([]);
     
-    resultData = resultData.map(row => {
-      const cleanId = standardizeWaveId(row.Wave_Number);
-      row.Wave_Number = cleanId;
-      const wms = wms204Store.rows[cleanId];
-      if (wms) {
-        row.WMS_Status = wms.status;
-        row.WMS_Allocated_Qty = wms.allocQ;
-        row.WMS_Total_Qty = wms.totalQ;
+    let resultData = await fetchWaveDataFromSheets();
+
+    resultData = resultData.map((row) => {
+      let cleanRow = { ...row };
+      if (cleanRow.Wave_Number) {
+        cleanRow.Wave_Number = standardizeWaveId(cleanRow.Wave_Number);
       }
-      return row;
+      if (cleanRow.Total_Qty) {
+        cleanRow.Total_Qty = parseNumericQty(cleanRow.Total_Qty);
+      }
+      cleanRow.Allocation_Owner_Group = cleanRow.Owner_Code || 'Other';
+      return cleanRow;
     });
 
     res.json(resultData);
-  } catch (err) { res.json([]); }
+  } catch (err) {
+    console.error('❌ ข้อผิดพลาดใน /api/waves/live:', err);
+    res.status(500).json([]);
+  }
 });
 
+// === API อัปเดตสถานะงานกลับลง Google Sheets แบบ Batch ===
 app.post('/api/waves/update-status', async (req, res) => {
   try {
+    if (!isSheetsDbConfigured) return res.json({ success: true });
+
     const payload = req.body;
     if (!payload || payload.length === 0) return res.json({ success: true });
 
-    let dbWaves = isSheetsConfigured ? await readSheet('Waves', WAVES_HEADERS) : mockWaves;
-    let hasChanges = false;
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: DB_SPREADSHEET_ID,
+      range: 'Wave_Monitoring!A:ZZ',
+    });
+    
+    const rows = response.data.values;
+    if (!rows || rows.length === 0) return res.json({ success: true });
+    
+    const headers = rows[0];
+    const updateData = []; 
+    const bookingColIdx = headers.indexOf('Vehicle_Booking_No');
 
-    payload.forEach((incomingWave) => {
-      const cleanId = getWaveNumberNoZero(incomingWave.id).padStart(10, '0');
-      let targetRow = dbWaves.find(w => getWaveNumberNoZero(w.Wave_Number).padStart(10, '0') === cleanId);
+    const getColLetter = (colIndex) => {
+      let temp, letter = '';
+      while (colIndex >= 0) {
+        temp = colIndex % 26;
+        letter = String.fromCharCode(temp + 65) + letter;
+        colIndex = (colIndex - temp) / 26 - 1;
+      }
+      return letter;
+    };
 
-      if (targetRow) {
-        hasChanges = true;
-        if (incomingWave.totalPieces !== undefined) targetRow.Total_Qty = Math.round(Number(incomingWave.totalPieces)) || 0;
-        if (incomingWave.transporter) targetRow.Transporter = incomingWave.transporter;
-        if (incomingWave.vehicleType) targetRow.Vehicle_Type = incomingWave.vehicleType;
-        if (incomingWave.bookingNo) targetRow.Vehicle_Booking_No = incomingWave.bookingNo;
-        if (incomingWave.licensePlate) targetRow.License_Plate = incomingWave.licensePlate;
-        if (incomingWave.isUrgent !== undefined) targetRow.Is_Urgent = String(incomingWave.isUrgent);
-
-        if (incomingWave.planUpdate) {
-          targetRow.Planned_Pick_Date = incomingWave.plannedPickDate;
-          targetRow.Planned_Pick_Time = incomingWave.plannedPickTime;
-          targetRow.Planned_Load_Date = incomingWave.plannedLoadDate;
-          targetRow.Planned_Load_Time = incomingWave.plannedLoadTime;
-        }
-
-        (incomingWave.steps || []).forEach(s => {
-          let key = s.key;
-          let capKey = key.charAt(0).toUpperCase() + key.slice(1);
-          targetRow[`Status_${capKey}`] = s.status;
-          targetRow[`User_${capKey}`] = s.status === 'pending' || s.status === 'reverted' ? '' : (s.actionUser || '');
-
-          let timeCol = key === 'pick' ? 'Picked_Complete_Timestamp' : (key === 'check' ? 'QC_Complete_Timestamp' : (key === 'truck' ? 'Hist_Truck_Time' : (key === 'load' ? 'Hist_Load_Time' : `Time_${capKey}`)));
-
-          if (s.status === 'reverted' || s.status === 'pending') {
-            targetRow[timeCol] = '';
-          } else if (s.actualTime && s.actualTime !== '-') {
-             let d = s.actualTimestamp && s.actualTimestamp !== '-' && s.actualTimestamp !== 'null' ? new Date(Number(s.actualTimestamp)) : new Date();
-             targetRow[timeCol] = d.toISOString();
-          }
-
-          if (key === 'load') {
-            if (s.status === 'pending' || s.status === 'reverted') {
-              targetRow.Dock_Door = ''; targetRow.Time_Load_Start = '';
-              dockOverlay.delete(incomingWave.id);
-            } else {
-              if (s.dockInfo && s.dockInfo !== '-') targetRow.Dock_Door = s.dockInfo;
-              if (s.doingDateObj && s.doingDateObj !== '-' && s.doingDateObj !== 'null') targetRow.Time_Load_Start = new Date(Number(s.doingDateObj)).toISOString();
-              dockOverlay.set(incomingWave.id, { dockDoor: targetRow.Dock_Door, loadStatus: s.status, licensePlate: targetRow.License_Plate, loadStartTime: s.doingDateObj, updatedAt: Date.now() });
+    payload.forEach((waveUpdate) => {
+      const targetWaveId = standardizeWaveId(waveUpdate.id);
+      const targetBooking = (waveUpdate.originalBookingNo || '').trim().toLowerCase();
+      
+      rows.forEach((row, index) => {
+        if (!row || !row[0]) return;
+        const currentWaveId = standardizeWaveId(row[0]);
+        
+        if (currentWaveId === targetWaveId) {
+          let isBookingMatch = true;
+          if (targetBooking && targetBooking !== '-' && bookingColIdx > -1) {
+            const rowBooking = (row[bookingColIdx] || '').trim().toLowerCase();
+            if (rowBooking && rowBooking !== '-' && rowBooking !== targetBooking) {
+              isBookingMatch = false;
             }
           }
-        });
-      }
+
+          if (isBookingMatch) {
+            const rowIndex = index + 1; 
+            
+            if (rowIndex > 1) { 
+              (waveUpdate.steps || []).forEach(step => {
+                const capKey = step.key.charAt(0).toUpperCase() + step.key.slice(1);
+                
+                const statusColName = `Status_${capKey}`;
+                const userColName = `User_${capKey}`;
+                let timeColName = `Time_${capKey}`;
+                
+                if (step.key === 'pick') timeColName = 'Picked_Complete_Timestamp';
+                if (step.key === 'check') timeColName = 'QC_Complete_Timestamp';
+                if (step.key === 'truck') timeColName = 'Hist_Truck_Time';
+                if (step.key === 'load') timeColName = 'Hist_Load_Time';
+
+                const statusColIdx = headers.indexOf(statusColName);
+                const userColIdx = headers.indexOf(userColName);
+                const timeColIdx = headers.indexOf(timeColName);
+
+                if (statusColIdx > -1) {
+                  updateData.push({
+                    range: `Wave_Monitoring!${getColLetter(statusColIdx)}${rowIndex}`,
+                    values: [[step.status === 'reverted' ? 'pending' : step.status]]
+                  });
+                }
+                
+                if (userColIdx > -1) {
+                  const userVal = (step.status === 'pending' || step.status === 'reverted') ? '' : (step.actionUser === '-' ? '' : step.actionUser);
+                  updateData.push({
+                    range: `Wave_Monitoring!${getColLetter(userColIdx)}${rowIndex}`,
+                    values: [[userVal]]
+                  });
+                }
+                
+                if (timeColIdx > -1) {
+                  let timeVal = '';
+                  if (step.status !== 'pending' && step.status !== 'reverted' && step.actualTimestamp && step.actualTimestamp !== '-') {
+                    const d = new Date(Number(step.actualTimestamp));
+                    timeVal = d.toLocaleString('en-CA', { hour12: false, timeZone: 'Asia/Bangkok' }).replace(',', '');
+                  }
+                  updateData.push({
+                    range: `Wave_Monitoring!${getColLetter(timeColIdx)}${rowIndex}`,
+                    values: [[timeVal]]
+                  });
+                }
+
+                if (step.key === 'load') {
+                  const dockColIdx = headers.indexOf('Dock_Door');
+                  const loadStartColIdx = headers.indexOf('Time_Load_Start');
+                  const licenseColIdx = headers.indexOf('License_Plate');
+
+                  if (step.status === 'pending' || step.status === 'reverted') {
+                    if (dockColIdx > -1) updateData.push({ range: `Wave_Monitoring!${getColLetter(dockColIdx)}${rowIndex}`, values: [['']] });
+                    if (loadStartColIdx > -1) updateData.push({ range: `Wave_Monitoring!${getColLetter(loadStartColIdx)}${rowIndex}`, values: [['']] });
+                  } else {
+                    if (dockColIdx > -1 && step.dockInfo && step.dockInfo !== '-') {
+                      updateData.push({ range: `Wave_Monitoring!${getColLetter(dockColIdx)}${rowIndex}`, values: [[step.dockInfo]] });
+                    }
+                    if (loadStartColIdx > -1 && step.doingDateObj && step.doingDateObj !== '-') {
+                      const dStart = new Date(Number(step.doingDateObj));
+                      const startVal = dStart.toLocaleString('en-CA', { hour12: false, timeZone: 'Asia/Bangkok' }).replace(',', '');
+                      updateData.push({ range: `Wave_Monitoring!${getColLetter(loadStartColIdx)}${rowIndex}`, values: [[startVal]] });
+                    }
+                  }
+                  if (licenseColIdx > -1 && waveUpdate.licensePlate) {
+                    updateData.push({ range: `Wave_Monitoring!${getColLetter(licenseColIdx)}${rowIndex}`, values: [[waveUpdate.licensePlate]] });
+                  }
+                }
+              });
+            }
+          }
+        }
+      });
     });
 
-    if (hasChanges && isSheetsConfigured) {
-      await writeSheet('Waves', dbWaves, WAVES_HEADERS);
-      await updateDashboardSummary(dbWaves); // 📊 สร้างและเขียน On-Time ทันที
+    if (updateData.length > 0) {
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: DB_SPREADSHEET_ID,
+        requestBody: {
+          valueInputOption: 'USER_ENTERED',
+          data: updateData,
+        },
+      });
+      console.log(`✅ อัปเดตข้อมูลสำเร็จ: ${updateData.length} เซลล์`);
+
+      // 📊 ซิงค์ Dashboard_Summary เมื่อสถานะมีการอัปเดต
+      const updatedWaves = await fetchWaveDataFromSheets();
+      await updateDashboardSummary(updatedWaves);
     }
 
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ success: false, message: err.toString() }); }
+  } catch (err) {
+    console.error('❌ อัปเดตสถานะขัดข้อง:', err.message);
+    res.status(500).json({ success: false, message: err.toString() });
+  }
 });
 
+// === ตัวแปรเก็บ Cache รายชื่อพนักงาน (อัปเดตทุก 1 ชม. ลดการโหลดช้า) ===
+let employeeCache = null;
+let lastCacheTime = 0;
+const CACHE_DURATION = 60 * 60 * 1000;
+
+app.post('/api/verify-employee', async (req, res) => {
+  const empId = req.body.employeeId;
+  if (!empId || empId.trim() === '') {
+    return res.json({ success: false, message: 'กรุณาระบุรหัสพนักงาน' });
+  }
+
+  try {
+    const now = Date.now();
+    const searchId = String(empId).trim();
+
+    if (searchId === '171080') return res.json({ success: true, name: 'Jooner' });
+
+    if (isSheetsDbConfigured) {
+      if (!employeeCache || now - lastCacheTime > CACHE_DURATION) {
+        try {
+          const response = await sheets.spreadsheets.values.get({
+            spreadsheetId: '1AWOeqhCqmBlSfGI5FWJVU4F77lDGNWBUH-TYpJeiYnI',
+            range: 'บันทึกเวลาทำงาน!B25:C', 
+          });
+          const rows = response.data.values;
+          
+          if (rows && rows.length > 0) {
+            employeeCache = {};
+            rows.forEach((row) => {
+              if (row[0] && row[1]) {
+                employeeCache[String(row[0]).trim()] = String(row[1]).trim();
+              }
+            });
+            lastCacheTime = now;
+            console.log(`✅ โหลดข้อมูลพนักงานสำเร็จ: ${Object.keys(employeeCache).length} คน`);
+          }
+        } catch (sheetErr) {
+          console.error('❌ ดึงข้อมูลพนักงานไม่สำเร็จ:', sheetErr.message);
+        }
+      }
+
+      if (employeeCache && employeeCache[searchId]) {
+        return res.json({ success: true, name: employeeCache[searchId] });
+      }
+    }
+
+    res.json({ success: false, message: 'ไม่พบรหัสพนักงานในฐานข้อมูล' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดภายในระบบเซิร์ฟเวอร์' });
+  }
+});
+
+app.get('/api/version', (req, res) => res.json({ version: '1.3.0' }));
+app.get('/api/settings', (req, res) => res.json({}));
+
+// ==========================================
+// 🚀 API สำหรับ Import แผนงาน
+// ==========================================
 app.post('/api/waves/bulk-insert', async (req, res) => {
   try {
-    const data = req.body;
-    if (!data || data.length === 0) return res.json({ success: false, message: 'ไม่มีข้อมูลในไฟล์' });
-
-    let dbWaves = isSheetsConfigured ? await readSheet('Waves', WAVES_HEADERS) : mockWaves;
-    let updatedCount = 0;
+    const sheetData = req.body; 
     
-    data.forEach(r => {
-        let cleanId = getWaveNumberNoZero(r.Wave_Number).padStart(10, '0');
-        let existing = dbWaves.find(w => getWaveNumberNoZero(w.Wave_Number).padStart(10, '0') === cleanId);
+    if (!sheetData || sheetData.length === 0) {
+      return res.status(400).json({ success: false, message: 'ไม่พบข้อมูล' });
+    }
+
+    if (isSheetsDbConfigured) {
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId: DB_SPREADSHEET_ID,
+        range: 'Wave_Monitoring!1:1',
+      });
+      
+      const headers = response.data.values ? response.data.values[0] : [];
+      
+      const rowsToAdd = sheetData.map(row => {
+        return headers.map(header => {
+          return row[header] !== undefined && row[header] !== null ? String(row[header]) : '';
+        });
+      });
+
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: DB_SPREADSHEET_ID,
+        range: 'Wave_Monitoring!A1',
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: rowsToAdd },
+      });
+
+      // 📊 ซิงค์ Dashboard_Summary เมื่อมีงานใหม่เข้ามา
+      const updatedWaves = await fetchWaveDataFromSheets();
+      await updateDashboardSummary(updatedWaves);
+    }
+
+    return res.json({ 
+      success: true, 
+      plannedWavesUpdated: sheetData.length,
+      message: `นำเข้าข้อมูลเรียบร้อยแล้วจำนวน ${sheetData.length} รายการ` 
+    });
+  } catch (err) {
+    console.error('❌ นำเข้าข้อมูลขัดข้อง:', err.message);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// === API สำหรับ Import 204 ===
+app.post('/api/wms-204/bulk', async (req, res) => {
+  try {
+    if (!isSheetsDbConfigured) return res.json({ success: true });
+
+    const records = req.body.records;
+    if (!records || records.length === 0) return res.json({ success: true });
+
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: DB_SPREADSHEET_ID,
+      range: 'Wave_Monitoring!A:ZZ',
+    });
+    
+    const rows = response.data.values;
+    if (!rows || rows.length === 0) return res.json({ success: true });
+    
+    const headers = rows[0];
+    const updateData = []; 
+
+    const getColLetter = (colIndex) => {
+      let temp, letter = '';
+      while (colIndex >= 0) {
+        temp = colIndex % 26;
+        letter = String.fromCharCode(temp + 65) + letter;
+        colIndex = (colIndex - temp) / 26 - 1;
+      }
+      return letter;
+    };
+
+    const getHeaderIdx = (names) => {
+      for (let name of names) {
+        const idx = headers.findIndex(h => String(h).trim().toLowerCase() === name.toLowerCase());
+        if (idx > -1) return idx;
+      }
+      return -1;
+    };
+
+    const statusIdx = getHeaderIdx(['WMS_204_Status', 'WMS_Status']);
+    const allocIdx = getHeaderIdx(['WMS_204_Allocated_Qty', 'WMS_Allocated_Qty', 'Allocated_Qty']);
+    const totalIdx = getHeaderIdx(['WMS_204_Total_Qty', 'WMS_Total_Qty', 'Total_Qty']);
+    const displayIdx = getHeaderIdx(['WMS_204_Display_Qty', 'WMS_Display_Qty']);
+
+    records.forEach((rec) => {
+      const targetWaveId = standardizeWaveId(rec.id);
+      
+      rows.forEach((row, index) => {
+        if (!row || !row[0]) return;
+        const currentWaveId = standardizeWaveId(row[0]);
         
-        if (existing) {
-            existing.Planned_Pick_Date = r.Planned_Pick_Date || existing.Planned_Pick_Date;
-            existing.Planned_Pick_Time = r.Planned_Pick_Time || existing.Planned_Pick_Time;
-            existing.Planned_Load_Date = r.Planned_Load_Date || existing.Planned_Load_Date;
-            existing.Planned_Load_Time = r.Planned_Load_Time || existing.Planned_Load_Time;
-            existing.Trip_No = r.Trip_No || existing.Trip_No;
-            existing.Transporter = r.Transporter || existing.Transporter;
-            existing.Vehicle_Type = r.Vehicle_Type || existing.Vehicle_Type;
-            existing.Vehicle_Booking_No = r.Vehicle_Booking_No || existing.Vehicle_Booking_No;
-            existing.Owner_Code = r.Owner_Code || existing.Owner_Code;
-            existing.Total_Qty = r.Total_Qty || existing.Total_Qty;
-            updatedCount++;
-        } else {
-            dbWaves.push({
-                Wave_Number: standardizeWaveId(cleanId),
-                Planned_Pick_Date: r.Planned_Pick_Date || '2026-06-18',
-                Planned_Pick_Time: r.Planned_Pick_Time || '',
-                Planned_Load_Date: r.Planned_Load_Date || '2026-06-18',
-                Planned_Load_Time: r.Planned_Load_Time || '12:00',
-                Trip_No: r.Trip_No || '1',
-                Transporter: r.Transporter || 'ไม่ระบุ',
-                Vehicle_Type: r.Vehicle_Type || '-',
-                Vehicle_Booking_No: r.Vehicle_Booking_No || '-',
-                Owner_Code: r.Owner_Code || 'Other',
-                Total_Qty: r.Total_Qty || 0,
-                Status_Allocate: 'pending', Status_Print: 'pending', Status_Pick: 'pending', 
-                Status_Check: 'pending', Status_Truck: 'pending', Status_Load: 'pending'
-            });
+        if (currentWaveId === targetWaveId) {
+          const rowIndex = index + 1;
+          if (rowIndex > 1) {
+            if (statusIdx > -1) updateData.push({ range: `Wave_Monitoring!${getColLetter(statusIdx)}${rowIndex}`, values: [[rec.status || '']] });
+            if (allocIdx > -1) updateData.push({ range: `Wave_Monitoring!${getColLetter(allocIdx)}${rowIndex}`, values: [[rec.allocQ || 0]] });
+            if (totalIdx > -1) updateData.push({ range: `Wave_Monitoring!${getColLetter(totalIdx)}${rowIndex}`, values: [[rec.totalQ || 0]] });
+            if (displayIdx > -1) updateData.push({ range: `Wave_Monitoring!${getColLetter(displayIdx)}${rowIndex}`, values: [[rec.pieces || 0]] });
+          }
         }
+      });
     });
 
-    if (isSheetsConfigured) {
-      await writeSheet('Waves', dbWaves, WAVES_HEADERS);
-      await updateDashboardSummary(dbWaves); // 📊 อัปเดต Summary เมื่อมีนำเข้าแผน
+    if (updateData.length > 0) {
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: DB_SPREADSHEET_ID,
+        requestBody: {
+          valueInputOption: 'USER_ENTERED',
+          data: updateData,
+        },
+      });
     }
 
-    res.json({ success: true, inserted: data.length, plannedWavesUpdated: updatedCount });
-  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+    return res.json({ success: true, message: 'บันทึกข้อมูล 204 ลง Google Sheets สำเร็จ' });
+  } catch (err) {
+    console.error('❌ อัปเดต 204 ขัดข้อง:', err.message);
+    return res.status(500).json({ success: false, message: err.message });
+  }
 });
 
-app.post('/api/waves/delete-id', async (req, res) => {
-  try {
-    let cleanId = getWaveNumberNoZero(req.body.waveId);
-    let dbWaves = isSheetsConfigured ? await readSheet('Waves', WAVES_HEADERS) : mockWaves;
-    
-    let originalLength = dbWaves.length;
-    dbWaves = dbWaves.filter(w => getWaveNumberNoZero(w.Wave_Number) !== cleanId);
-    
-    if (dbWaves.length !== originalLength && isSheetsConfigured) {
-       await writeSheet('Waves', dbWaves, WAVES_HEADERS);
-       await updateDashboardSummary(dbWaves);
-    }
-    res.json({ success: true });
-  } catch (err) { res.json({ success: false, message: err.toString() }); }
-});
-
-app.post('/api/waves/delete', async (req, res) => {
-  try {
-    const dateStr = String(req.body.dateStr || '').trim();
-    let dbWaves = isSheetsConfigured ? await readSheet('Waves', WAVES_HEADERS) : mockWaves;
-    
-    let originalLength = dbWaves.length;
-    dbWaves = dbWaves.filter((w) => String(w.Planned_Pick_Date).slice(0, 10) !== dateStr);
-    
-    if (dbWaves.length !== originalLength && isSheetsConfigured) {
-       await writeSheet('Waves', dbWaves, WAVES_HEADERS);
-       await updateDashboardSummary(dbWaves);
-    }
-    res.json({ success: true });
-  } catch (err) { res.json({ success: false, message: err.toString() }); }
-});
-
-// ==========================================
-// 🔴 DOCK & LOGS
-// ==========================================
-app.get('/api/dock/status', (req, res) => res.json(Object.fromEntries(dockOverlay)));
-app.post('/api/dock/clear', (req, res) => { dockOverlay.delete(String(req.body.waveId)); res.json({ success: true }); });
-
-app.post('/api/logs/save', async (req, res) => {
-  try {
-    if (!isSheetsConfigured) return res.json({ success: true });
-    await appendSheet('System_Logs', [[new Date(req.body.ts).toISOString(), req.body.user || '', req.body.waveId || '', req.body.action || '']]);
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ success: false }); }
-});
-
-app.get('/api/logs', async (req, res) => {
-  try {
-    if (!isSheetsConfigured) return res.json([]);
-    const rows = await readSheet('System_Logs', ['Timestamp', 'User', 'Wave_ID', 'Action']);
-    const logs = rows.map(r => ({ ts: r.Timestamp, user: r.User, waveId: r.Wave_ID, action: r.Action })).filter(l => l.ts).reverse().slice(0, 300);
-    res.json(logs);
-  } catch (err) { res.status(500).json([]); }
-});
-
-// ==========================================
-// ⚙️ WMS 204 & Settings
-// ==========================================
-const SETTINGS_FILE = path.join(__dirname, 'settings.json');
-if (fs.existsSync(SETTINGS_FILE)) { try { Object.assign(defaultSettings, JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'))); } catch (e) {} }
-
-app.get('/api/settings', (req, res) => res.json(defaultSettings));
-app.post('/api/settings/save', (req, res) => {
-  Object.assign(defaultSettings, req.body);
-  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(defaultSettings, null, 4), 'utf8');
-  res.json({ success: true });
-});
-
-app.get('/api/version', (req, res) => res.json({ version: '1.4.0' }));
-app.get('/api/last-204-time', (req, res) => res.json({ time: defaultSettings.last204Time || 'ยังไม่ได้อัปเดต' }));
+// API สำหรับเก็บและแสดงเวลา Last Sync 204
+let last204TimeStr = 'ยังไม่ได้อัปเดต';
 app.post('/api/update-204-time', (req, res) => {
-  defaultSettings.last204Time = new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(defaultSettings, null, 4), 'utf8');
-  res.json({ success: true, time: defaultSettings.last204Time });
+  last204TimeStr = req.body.time || last204TimeStr;
+  res.json({ success: true, time: last204TimeStr });
+});
+app.get('/api/last-204-time', (req, res) => {
+  res.json({ time: last204TimeStr });
 });
 
-app.post('/api/wms-204/bulk', (req, res) => {
-  try {
-    const records = Array.isArray(req.body && req.body.records) ? req.body.records : [];
-    records.forEach(r => {
-      wms204Store.rows[standardizeWaveId(r.id)] = { status: r.status, allocQ: parseNumericQty(r.allocQ), totalQ: parseNumericQty(r.totalQ), pieces: parseNumericQty(r.pieces), updatedAt: new Date().toISOString() };
-    });
-    saveWms204Store();
-    res.json({ success: true, count: Object.keys(wms204Store.rows).length });
-  } catch (err) { res.status(500).json({ success: false }); }
+// ==========================================
+app.get(/.*/, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.get(/.*/, (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
-
-app.listen(port, () => console.log(`🚀 DC Node.js Server is running at http://localhost:${port}`));
+app.listen(port, () =>
+  console.log(`🚀 V2 Server is running on port ${port}`)
+);
