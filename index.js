@@ -25,11 +25,6 @@ function getWaveNumberNoZero(id) {
   return String(id ?? '').replace(/^WAVE-?/i, '').replace(/^W-?/i, '').replace(/^0+/, '') || '0';
 }
 
-function getBookingKey(bookingNo) {
-  const booking = String(bookingNo ?? '').trim();
-  return (!booking || booking === '-' || booking.toUpperCase() === 'NO_BOOKING') ? '' : booking;
-}
-
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -45,25 +40,24 @@ const keyFilePath = path.join(__dirname, 'key.json');
 let sheets = null;
 let isSheetsConfigured = false;
 
-// ⚠️ SPREADSHEET_ID ของคุณ
+// ⚠️ ใช้ SPREADSHEET_ID ของคุณ
 const SPREADSHEET_ID = '1TL-tj-BrvYM7i_wNHlA0x641_VOqfT9SLpmm2NZATOo';
 
 if (fs.existsSync(keyFilePath)) {
   const sheetsAuth = new google.auth.GoogleAuth({
     keyFile: keyFilePath,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'], 
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });
   sheets = google.sheets({ version: 'v4', auth: sheetsAuth });
   isSheetsConfigured = true;
   console.log('✅ โหลดการตั้งค่า Google Sheets สำเร็จ');
 } else {
-  console.warn('⚠️ ไม่พบไฟล์ key.json');
+  console.warn('⚠️ ไม่พบไฟล์ key.json ระบบจะทำงานผ่าน Memory ชั่วคราว');
 }
 
 // ==========================================
 // 🛠️ Google Sheets Helper Functions
 // ==========================================
-
 const WAVES_HEADERS = [
   'Wave_Number', 'Planned_Pick_Date', 'Planned_Pick_Time', 'Planned_Load_Date', 'Planned_Load_Time', 
   'Trip_No', 'Transporter', 'Vehicle_Type', 'Vehicle_Booking_No', 'Branch_Name', 'Branch_Code', 
@@ -77,7 +71,7 @@ const WAVES_HEADERS = [
 ];
 
 const SUMMARY_HEADERS = [
-  'Wave_Number', 'Planned_Load_Date', 'Transporter', 'Owner_Code', 'Total_Qty',
+  'Wave_Number', 'Planned_Load_Date', 'Planned_Load_Time', 'Transporter', 'Vehicle_Type', 'Owner_Code', 'Total_Qty',
   'Allocate_Status', 'Allocate_OnTime',
   'Print_Status', 'Print_OnTime',
   'Pick_Status', 'Pick_OnTime',
@@ -95,16 +89,17 @@ async function readSheet(sheetName, headersList) {
     });
     const rows = res.data.values;
     if (!rows || rows.length < 2) return [];
-    const sheetHeaders = rows[0];
+    
+    const actualHeaders = rows[0];
     return rows.slice(1).map(row => {
       let obj = {};
-      sheetHeaders.forEach((h, i) => {
+      actualHeaders.forEach((h, i) => {
         obj[h] = row[i] !== undefined ? row[i] : null;
       });
       return obj;
     });
   } catch (err) {
-    console.warn(`⚠️ อ่าน ${sheetName} ไม่สำเร็จ (อาจยังไม่มีข้อมูลหรือไม่มี Tab นี้)`);
+    console.warn(`⚠️ อ่านแผ่นงาน ${sheetName} ไม่สำเร็จ`);
     return [];
   }
 }
@@ -153,43 +148,45 @@ async function updateDashboardSummary(dbWaves) {
   if (!isSheetsConfigured) return;
   
   const summaryData = dbWaves.map(w => {
-    let target = new Date();
+    let targetMs = null;
     if (w.Planned_Load_Date) {
-      target = new Date(w.Planned_Load_Date);
-    }
-    if (w.Planned_Load_Time) {
-      let parts = String(w.Planned_Load_Time).split(':');
-      target.setHours(parseInt(parts[0]) || 0, parseInt(parts[1]) || 0, 0, 0);
+      const timeStr = w.Planned_Load_Time || '00:00';
+      // แปลงเวลาให้เป็น Timestamp (สมมติโซนเวลาไทย +07:00)
+      const d = new Date(`${w.Planned_Load_Date}T${timeStr}:00+07:00`);
+      if(!isNaN(d.getTime())) targetMs = d.getTime();
     }
 
-    // ฟังก์ชันเช็คว่า On-Time หรือ Late
+    // เช็ค SLA: ลบเวลาถอยหลังจากเป้าหมายโหลด
     const checkSLA = (actualTimeStr, minusMins) => {
       if (!actualTimeStr || actualTimeStr === '-' || actualTimeStr === '') return 'Pending';
       const actualDate = new Date(actualTimeStr);
       if (isNaN(actualDate.getTime())) return 'Pending';
+      if (!targetMs) return 'No_Plan'; // ไม่มีเวลาเป้าหมายให้คำนวณ
       
-      const slaTime = target.getTime() - (minusMins * 60000);
+      const slaLimitTime = targetMs - (minusMins * 60000);
       return actualDate.getTime() <= slaTime ? 'On-Time' : 'Late';
     };
 
     return {
       Wave_Number: w.Wave_Number,
       Planned_Load_Date: w.Planned_Load_Date,
+      Planned_Load_Time: w.Planned_Load_Time,
       Transporter: w.Transporter,
+      Vehicle_Type: w.Vehicle_Type,
       Owner_Code: w.Owner_Code,
       Total_Qty: w.Total_Qty,
       Allocate_Status: w.Status_Allocate,
-      Allocate_OnTime: checkSLA(w.Time_Allocate, 180),
+      Allocate_OnTime: checkSLA(w.Time_Allocate, 180), // 3 ชั่วโมงก่อนโหลด
       Print_Status: w.Status_Print,
-      Print_OnTime: checkSLA(w.Time_Print, 120),
+      Print_OnTime: checkSLA(w.Time_Print, 120), // 2 ชั่วโมงก่อนโหลด
       Pick_Status: w.Status_Pick,
-      Pick_OnTime: checkSLA(w.Picked_Complete_Timestamp, 90),
+      Pick_OnTime: checkSLA(w.Picked_Complete_Timestamp, 90), // 1.5 ชั่วโมงก่อนโหลด
       QC_Status: w.Status_Check,
-      QC_OnTime: checkSLA(w.QC_Complete_Timestamp, 30),
+      QC_OnTime: checkSLA(w.QC_Complete_Timestamp, 30), // 30 นาทีก่อนโหลด
       Truck_Status: w.Status_Truck,
-      Truck_OnTime: checkSLA(w.Hist_Truck_Time, 15),
+      Truck_OnTime: checkSLA(w.Hist_Truck_Time, 15), // รถเข้า 15 นาทีก่อนโหลด
       Load_Status: w.Status_Load,
-      Load_OnTime: checkSLA(w.Hist_Load_Time, 0)
+      Load_OnTime: checkSLA(w.Hist_Load_Time, 0) // โหลดเสร็จตรงเวลา
     };
   });
 
@@ -219,10 +216,28 @@ loadWms204Store();
 // 🚀 API Endpoints
 // ==========================================
 
-app.post('/api/verify-employee', (req, res) => {
+let employeeCache = null;
+let lastCacheTime = 0;
+
+app.post('/api/verify-employee', async (req, res) => {
   const empId = String(req.body.employeeId || '').trim();
   if (!empId) return res.json({ success: false, message: 'กรุณาระบุรหัสพนักงาน' });
   if (empId === '171080') return res.json({ success: true, name: 'Jooner' });
+
+  if (isSheetsConfigured) {
+    const now = Date.now();
+    if (!employeeCache || now - lastCacheTime > 3600000) {
+      try {
+        const response = await sheets.spreadsheets.values.get({ spreadsheetId: '1AWOeqhCqmBlSfGI5FWJVU4F77lDGNWBUH-TYpJeiYnI', range: 'บันทึกเวลาทำงาน!B25:C' });
+        if (response.data.values) {
+          employeeCache = {};
+          response.data.values.forEach(row => { if (row[0] && row[1]) employeeCache[String(row[0]).trim()] = String(row[1]).trim(); });
+          lastCacheTime = now;
+        }
+      } catch (err) {}
+    }
+    if (employeeCache && employeeCache[empId]) return res.json({ success: true, name: employeeCache[empId] });
+  }
 
   const backupTeam = { 'EMP01': 'วันดี', 'EMP02': 'จิรวรรณ', 'EMP03': 'ศุภนิดา' };
   if (backupTeam[empId]) res.json({ success: true, name: backupTeam[empId] });
@@ -231,9 +246,8 @@ app.post('/api/verify-employee', (req, res) => {
 
 app.get('/api/waves/live', async (req, res) => {
   try {
-    let resultData = await readSheet('Waves', WAVES_HEADERS);
+    let resultData = isSheetsConfigured ? await readSheet('Waves', WAVES_HEADERS) : mockWaves;
     
-    // ทับค่า WMS 204
     resultData = resultData.map(row => {
       const cleanId = standardizeWaveId(row.Wave_Number);
       row.Wave_Number = cleanId;
@@ -254,9 +268,8 @@ app.post('/api/waves/update-status', async (req, res) => {
   try {
     const payload = req.body;
     if (!payload || payload.length === 0) return res.json({ success: true });
-    if (!isSheetsConfigured) return res.json({ success: true });
 
-    let dbWaves = await readSheet('Waves', WAVES_HEADERS);
+    let dbWaves = isSheetsConfigured ? await readSheet('Waves', WAVES_HEADERS) : mockWaves;
     let hasChanges = false;
 
     payload.forEach((incomingWave) => {
@@ -283,24 +296,24 @@ app.post('/api/waves/update-status', async (req, res) => {
           let key = s.key;
           let capKey = key.charAt(0).toUpperCase() + key.slice(1);
           targetRow[`Status_${capKey}`] = s.status;
-          targetRow[`User_${capKey}`] = s.status === 'pending' ? '' : (s.actionUser || '');
+          targetRow[`User_${capKey}`] = s.status === 'pending' || s.status === 'reverted' ? '' : (s.actionUser || '');
 
           let timeCol = key === 'pick' ? 'Picked_Complete_Timestamp' : (key === 'check' ? 'QC_Complete_Timestamp' : (key === 'truck' ? 'Hist_Truck_Time' : (key === 'load' ? 'Hist_Load_Time' : `Time_${capKey}`)));
 
-          if (s.actualTime && s.actualTime !== '-') {
+          if (s.status === 'reverted' || s.status === 'pending') {
+            targetRow[timeCol] = '';
+          } else if (s.actualTime && s.actualTime !== '-') {
              let d = s.actualTimestamp && s.actualTimestamp !== '-' && s.actualTimestamp !== 'null' ? new Date(Number(s.actualTimestamp)) : new Date();
              targetRow[timeCol] = d.toISOString();
-          } else if (s.status === 'pending') {
-            targetRow[timeCol] = '';
           }
 
           if (key === 'load') {
-            if (s.status === 'pending') {
+            if (s.status === 'pending' || s.status === 'reverted') {
               targetRow.Dock_Door = ''; targetRow.Time_Load_Start = '';
               dockOverlay.delete(incomingWave.id);
             } else {
               if (s.dockInfo && s.dockInfo !== '-') targetRow.Dock_Door = s.dockInfo;
-              if (s.doingDateObj && s.doingDateObj !== '-') targetRow.Time_Load_Start = new Date(Number(s.doingDateObj)).toISOString();
+              if (s.doingDateObj && s.doingDateObj !== '-' && s.doingDateObj !== 'null') targetRow.Time_Load_Start = new Date(Number(s.doingDateObj)).toISOString();
               dockOverlay.set(incomingWave.id, { dockDoor: targetRow.Dock_Door, loadStatus: s.status, licensePlate: targetRow.License_Plate, loadStartTime: s.doingDateObj, updatedAt: Date.now() });
             }
           }
@@ -308,9 +321,9 @@ app.post('/api/waves/update-status', async (req, res) => {
       }
     });
 
-    if (hasChanges) {
+    if (hasChanges && isSheetsConfigured) {
       await writeSheet('Waves', dbWaves, WAVES_HEADERS);
-      await updateDashboardSummary(dbWaves); // 📊 สร้างและเขียน Dashboard_Summary
+      await updateDashboardSummary(dbWaves); // 📊 สร้างและเขียน On-Time ทันที
     }
 
     res.json({ success: true });
@@ -321,9 +334,8 @@ app.post('/api/waves/bulk-insert', async (req, res) => {
   try {
     const data = req.body;
     if (!data || data.length === 0) return res.json({ success: false, message: 'ไม่มีข้อมูลในไฟล์' });
-    if (!isSheetsConfigured) return res.json({ success: true, inserted: data.length });
 
-    let dbWaves = await readSheet('Waves', WAVES_HEADERS);
+    let dbWaves = isSheetsConfigured ? await readSheet('Waves', WAVES_HEADERS) : mockWaves;
     let updatedCount = 0;
     
     data.forEach(r => {
@@ -361,8 +373,10 @@ app.post('/api/waves/bulk-insert', async (req, res) => {
         }
     });
 
-    await writeSheet('Waves', dbWaves, WAVES_HEADERS);
-    await updateDashboardSummary(dbWaves); // 📊 อัปเดต Summary เมื่อมีนำเข้าแผน
+    if (isSheetsConfigured) {
+      await writeSheet('Waves', dbWaves, WAVES_HEADERS);
+      await updateDashboardSummary(dbWaves); // 📊 อัปเดต Summary เมื่อมีนำเข้าแผน
+    }
 
     res.json({ success: true, inserted: data.length, plannedWavesUpdated: updatedCount });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
@@ -371,11 +385,12 @@ app.post('/api/waves/bulk-insert', async (req, res) => {
 app.post('/api/waves/delete-id', async (req, res) => {
   try {
     let cleanId = getWaveNumberNoZero(req.body.waveId);
-    if (!isSheetsConfigured) return res.json({ success: true });
-    let dbWaves = await readSheet('Waves', WAVES_HEADERS);
+    let dbWaves = isSheetsConfigured ? await readSheet('Waves', WAVES_HEADERS) : mockWaves;
+    
     let originalLength = dbWaves.length;
     dbWaves = dbWaves.filter(w => getWaveNumberNoZero(w.Wave_Number) !== cleanId);
-    if (dbWaves.length !== originalLength) {
+    
+    if (dbWaves.length !== originalLength && isSheetsConfigured) {
        await writeSheet('Waves', dbWaves, WAVES_HEADERS);
        await updateDashboardSummary(dbWaves);
     }
@@ -386,11 +401,12 @@ app.post('/api/waves/delete-id', async (req, res) => {
 app.post('/api/waves/delete', async (req, res) => {
   try {
     const dateStr = String(req.body.dateStr || '').trim();
-    if (!isSheetsConfigured) return res.json({ success: true });
-    let dbWaves = await readSheet('Waves', WAVES_HEADERS);
+    let dbWaves = isSheetsConfigured ? await readSheet('Waves', WAVES_HEADERS) : mockWaves;
+    
     let originalLength = dbWaves.length;
     dbWaves = dbWaves.filter((w) => String(w.Planned_Pick_Date).slice(0, 10) !== dateStr);
-    if (dbWaves.length !== originalLength) {
+    
+    if (dbWaves.length !== originalLength && isSheetsConfigured) {
        await writeSheet('Waves', dbWaves, WAVES_HEADERS);
        await updateDashboardSummary(dbWaves);
     }
@@ -407,7 +423,7 @@ app.post('/api/dock/clear', (req, res) => { dockOverlay.delete(String(req.body.w
 app.post('/api/logs/save', async (req, res) => {
   try {
     if (!isSheetsConfigured) return res.json({ success: true });
-    await appendSheet('Logs', [[new Date(req.body.ts).toISOString(), req.body.user || '', req.body.waveId || '', req.body.action || '']]);
+    await appendSheet('System_Logs', [[new Date(req.body.ts).toISOString(), req.body.user || '', req.body.waveId || '', req.body.action || '']]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ success: false }); }
 });
@@ -415,7 +431,7 @@ app.post('/api/logs/save', async (req, res) => {
 app.get('/api/logs', async (req, res) => {
   try {
     if (!isSheetsConfigured) return res.json([]);
-    const rows = await readSheet('Logs', ['Timestamp', 'User', 'Wave_ID', 'Action']);
+    const rows = await readSheet('System_Logs', ['Timestamp', 'User', 'Wave_ID', 'Action']);
     const logs = rows.map(r => ({ ts: r.Timestamp, user: r.User, waveId: r.Wave_ID, action: r.Action })).filter(l => l.ts).reverse().slice(0, 300);
     res.json(logs);
   } catch (err) { res.status(500).json([]); }
@@ -434,7 +450,7 @@ app.post('/api/settings/save', (req, res) => {
   res.json({ success: true });
 });
 
-app.get('/api/version', (req, res) => res.json({ version: '1.3.0' }));
+app.get('/api/version', (req, res) => res.json({ version: '1.4.0' }));
 app.get('/api/last-204-time', (req, res) => res.json({ time: defaultSettings.last204Time || 'ยังไม่ได้อัปเดต' }));
 app.post('/api/update-204-time', (req, res) => {
   defaultSettings.last204Time = new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
