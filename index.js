@@ -214,6 +214,8 @@ app.post('/api/waves/update-status', async (req, res) => {
     
     const headers = rows[0];
     const updateData = []; 
+    // 🟢 ดึงตำแหน่งคอลัมน์ Booking มาเตรียมไว้ (เผื่อ 1 Wave มีหลาย Booking)
+    const bookingColIdx = headers.indexOf('Vehicle_Booking_No');
 
     const getColLetter = (colIndex) => {
       let temp, letter = '';
@@ -227,79 +229,104 @@ app.post('/api/waves/update-status', async (req, res) => {
 
     payload.forEach((waveUpdate) => {
       const targetWaveId = standardizeWaveId(waveUpdate.id);
-      const rowIndex = rows.findIndex(row => standardizeWaveId(row[0]) === targetWaveId) + 1;
+      const targetBooking = (waveUpdate.originalBookingNo || '').trim().toLowerCase();
       
-      if (rowIndex > 1) { 
-        (waveUpdate.steps || []).forEach(step => {
-          const capKey = step.key.charAt(0).toUpperCase() + step.key.slice(1);
+      // 🟢 เปลี่ยนจาก findIndex (หาแถวเดียว) เป็น forEach วนลูปหา "ทุกแถว" ใน Sheets
+      rows.forEach((row, index) => {
+        if (!row || !row[0]) return;
+        
+        const currentWaveId = standardizeWaveId(row[0]);
+        
+        // ถ้าเลข Wave ตรงกัน ให้ประมวลผลบรรทัดนี้
+        if (currentWaveId === targetWaveId) {
           
-          const statusColName = `Status_${capKey}`;
-          const userColName = `User_${capKey}`;
-          let timeColName = `Time_${capKey}`;
-          
-          if (step.key === 'pick') timeColName = 'Picked_Complete_Timestamp';
-          if (step.key === 'check') timeColName = 'QC_Complete_Timestamp';
-          if (step.key === 'truck') timeColName = 'Hist_Truck_Time';
-          if (step.key === 'load') timeColName = 'Hist_Load_Time';
-
-          const statusColIdx = headers.indexOf(statusColName);
-          const userColIdx = headers.indexOf(userColName);
-          const timeColIdx = headers.indexOf(timeColName);
-
-          if (statusColIdx > -1) {
-            updateData.push({
-              range: `Wave_Monitoring!${getColLetter(statusColIdx)}${rowIndex}`,
-              values: [[step.status === 'reverted' ? 'pending' : step.status]]
-            });
-          }
-          
-          if (userColIdx > -1) {
-            const userVal = (step.status === 'pending' || step.status === 'reverted') ? '' : (step.actionUser === '-' ? '' : step.actionUser);
-            updateData.push({
-              range: `Wave_Monitoring!${getColLetter(userColIdx)}${rowIndex}`,
-              values: [[userVal]]
-            });
-          }
-          
-          if (timeColIdx > -1) {
-            let timeVal = '';
-            if (step.status !== 'pending' && step.status !== 'reverted' && step.actualTimestamp && step.actualTimestamp !== '-') {
-              const d = new Date(Number(step.actualTimestamp));
-              timeVal = d.toLocaleString('en-CA', { hour12: false, timeZone: 'Asia/Bangkok' }).replace(',', '');
-            }
-            updateData.push({
-              range: `Wave_Monitoring!${getColLetter(timeColIdx)}${rowIndex}`,
-              values: [[timeVal]]
-            });
-          }
-
-          if (step.key === 'load') {
-            const dockColIdx = headers.indexOf('Dock_Door');
-            const loadStartColIdx = headers.indexOf('Time_Load_Start');
-            const licenseColIdx = headers.indexOf('License_Plate');
-
-            if (step.status === 'pending' || step.status === 'reverted') {
-              if (dockColIdx > -1) updateData.push({ range: `Wave_Monitoring!${getColLetter(dockColIdx)}${rowIndex}`, values: [['']] });
-              if (loadStartColIdx > -1) updateData.push({ range: `Wave_Monitoring!${getColLetter(loadStartColIdx)}${rowIndex}`, values: [['']] });
-            } else {
-              if (dockColIdx > -1 && step.dockInfo && step.dockInfo !== '-') {
-                updateData.push({ range: `Wave_Monitoring!${getColLetter(dockColIdx)}${rowIndex}`, values: [[step.dockInfo]] });
-              }
-              if (loadStartColIdx > -1 && step.doingDateObj && step.doingDateObj !== '-') {
-                const dStart = new Date(Number(step.doingDateObj));
-                const startVal = dStart.toLocaleString('en-CA', { hour12: false, timeZone: 'Asia/Bangkok' }).replace(',', '');
-                updateData.push({ range: `Wave_Monitoring!${getColLetter(loadStartColIdx)}${rowIndex}`, values: [[startVal]] });
-              }
-            }
-            if (licenseColIdx > -1 && waveUpdate.licensePlate) {
-              updateData.push({ range: `Wave_Monitoring!${getColLetter(licenseColIdx)}${rowIndex}`, values: [[waveUpdate.licensePlate]] });
+          // เช็ค Booking_No ร่วมด้วย ป้องกันกรณี 1 Wave มีหลาย Booking (ถ้าระบบไม่ได้แยก Booking ก็จะผ่านไปได้เลย)
+          let isBookingMatch = true;
+          if (targetBooking && targetBooking !== '-' && bookingColIdx > -1) {
+            const rowBooking = (row[bookingColIdx] || '').trim().toLowerCase();
+            if (rowBooking && rowBooking !== '-' && rowBooking !== targetBooking) {
+              isBookingMatch = false;
             }
           }
-        });
-      }
+
+          if (isBookingMatch) {
+            const rowIndex = index + 1; // +1 เพราะ Google Sheets เริ่มนับแถวที่ 1
+            
+            if (rowIndex > 1) { // ป้องกันการทับหัวตาราง
+              (waveUpdate.steps || []).forEach(step => {
+                const capKey = step.key.charAt(0).toUpperCase() + step.key.slice(1);
+                
+                const statusColName = `Status_${capKey}`;
+                const userColName = `User_${capKey}`;
+                let timeColName = `Time_${capKey}`;
+                
+                if (step.key === 'pick') timeColName = 'Picked_Complete_Timestamp';
+                if (step.key === 'check') timeColName = 'QC_Complete_Timestamp';
+                if (step.key === 'truck') timeColName = 'Hist_Truck_Time';
+                if (step.key === 'load') timeColName = 'Hist_Load_Time';
+
+                const statusColIdx = headers.indexOf(statusColName);
+                const userColIdx = headers.indexOf(userColName);
+                const timeColIdx = headers.indexOf(timeColName);
+
+                if (statusColIdx > -1) {
+                  updateData.push({
+                    range: `Wave_Monitoring!${getColLetter(statusColIdx)}${rowIndex}`,
+                    values: [[step.status === 'reverted' ? 'pending' : step.status]]
+                  });
+                }
+                
+                if (userColIdx > -1) {
+                  const userVal = (step.status === 'pending' || step.status === 'reverted') ? '' : (step.actionUser === '-' ? '' : step.actionUser);
+                  updateData.push({
+                    range: `Wave_Monitoring!${getColLetter(userColIdx)}${rowIndex}`,
+                    values: [[userVal]]
+                  });
+                }
+                
+                if (timeColIdx > -1) {
+                  let timeVal = '';
+                  if (step.status !== 'pending' && step.status !== 'reverted' && step.actualTimestamp && step.actualTimestamp !== '-') {
+                    const d = new Date(Number(step.actualTimestamp));
+                    timeVal = d.toLocaleString('en-CA', { hour12: false, timeZone: 'Asia/Bangkok' }).replace(',', '');
+                  }
+                  updateData.push({
+                    range: `Wave_Monitoring!${getColLetter(timeColIdx)}${rowIndex}`,
+                    values: [[timeVal]]
+                  });
+                }
+
+                if (step.key === 'load') {
+                  const dockColIdx = headers.indexOf('Dock_Door');
+                  const loadStartColIdx = headers.indexOf('Time_Load_Start');
+                  const licenseColIdx = headers.indexOf('License_Plate');
+
+                  if (step.status === 'pending' || step.status === 'reverted') {
+                    if (dockColIdx > -1) updateData.push({ range: `Wave_Monitoring!${getColLetter(dockColIdx)}${rowIndex}`, values: [['']] });
+                    if (loadStartColIdx > -1) updateData.push({ range: `Wave_Monitoring!${getColLetter(loadStartColIdx)}${rowIndex}`, values: [['']] });
+                  } else {
+                    if (dockColIdx > -1 && step.dockInfo && step.dockInfo !== '-') {
+                      updateData.push({ range: `Wave_Monitoring!${getColLetter(dockColIdx)}${rowIndex}`, values: [[step.dockInfo]] });
+                    }
+                    if (loadStartColIdx > -1 && step.doingDateObj && step.doingDateObj !== '-') {
+                      const dStart = new Date(Number(step.doingDateObj));
+                      const startVal = dStart.toLocaleString('en-CA', { hour12: false, timeZone: 'Asia/Bangkok' }).replace(',', '');
+                      updateData.push({ range: `Wave_Monitoring!${getColLetter(loadStartColIdx)}${rowIndex}`, values: [[startVal]] });
+                    }
+                  }
+                  if (licenseColIdx > -1 && waveUpdate.licensePlate) {
+                    updateData.push({ range: `Wave_Monitoring!${getColLetter(licenseColIdx)}${rowIndex}`, values: [[waveUpdate.licensePlate]] });
+                  }
+                }
+              });
+            }
+          }
+        }
+      });
     });
 
     if (updateData.length > 0) {
+      // อัปเดตเซลล์ทั้งหมดที่ค้นเจอในคำสั่งเดียว (เร็วและไม่ค้าง)
       await sheets.spreadsheets.values.batchUpdate({
         spreadsheetId: DB_SPREADSHEET_ID,
         requestBody: {
