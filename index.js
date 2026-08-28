@@ -200,7 +200,7 @@ app.post('/api/verify-employee', async (req, res) => {
   res.json({ success: true, name: 'Staff' });
 });
 
-app.get('/api/version', (req, res) => res.json({ version: '2.0.0' }));
+app.get('/api/version', (req, res) => res.json({ version: '1.3.0' }));
 app.get('/api/settings', (req, res) => res.json({}));
 
 app.get(/.*/, (req, res) => {
