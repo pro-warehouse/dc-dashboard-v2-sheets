@@ -194,10 +194,61 @@ app.post('/api/waves/update-status', async (req, res) => {
   res.json({ success: true }); // จำลองการเซฟผ่าน
 });
 
+// === ตัวแปรเก็บ Cache รายชื่อพนักงาน (อัปเดตทุก 1 ชม. ลดการโหลดช้า) ===
+let employeeCache = null;
+let lastCacheTime = 0;
+const CACHE_DURATION = 60 * 60 * 1000;
+
 app.post('/api/verify-employee', async (req, res) => {
   const empId = req.body.employeeId;
-  if (empId === '171080') return res.json({ success: true, name: 'Jooner' });
-  res.json({ success: true, name: 'Staff' });
+  if (!empId || empId.trim() === '') {
+    return res.json({ success: false, message: 'กรุณาระบุรหัสพนักงาน' });
+  }
+
+  try {
+    const now = Date.now();
+    const searchId = String(empId).trim();
+
+    // ข้อยกเว้นพิเศษสำหรับแอดมินระบบ
+    if (searchId === '171080') return res.json({ success: true, name: 'Jooner' });
+
+    if (isSheetsDbConfigured) {
+      // ถ้าไม่มี Cache หรือหมดอายุ ให้ไปดึงใหม่จาก Sheets
+      if (!employeeCache || now - lastCacheTime > CACHE_DURATION) {
+        try {
+          const response = await sheets.spreadsheets.values.get({
+            spreadsheetId: '1AWOeqhCqmBlSfGI5FWJVU4F77lDGNWBUH-TYpJeiYnI',
+            // อ้างอิงจากโค้ดเดิม ใช้ชื่อแท็บ "บันทึกเวลาทำงาน"
+            range: 'บันทึกเวลาทำงาน!B25:C', 
+          });
+          const rows = response.data.values;
+          
+          if (rows && rows.length > 0) {
+            employeeCache = {};
+            rows.forEach((row) => {
+              // row[0] คือคอลัมน์ B (รหัส), row[1] คือคอลัมน์ C (ชื่อ)
+              if (row[0] && row[1]) {
+                employeeCache[String(row[0]).trim()] = String(row[1]).trim();
+              }
+            });
+            lastCacheTime = now;
+            console.log(`✅ โหลดข้อมูลพนักงานสำเร็จ: ${Object.keys(employeeCache).length} คน`);
+          }
+        } catch (sheetErr) {
+          console.error('❌ ดึงข้อมูลพนักงานไม่สำเร็จ:', sheetErr.message);
+        }
+      }
+
+      // เช็ครหัสพนักงานกับข้อมูลที่ดึงมา
+      if (employeeCache && employeeCache[searchId]) {
+        return res.json({ success: true, name: employeeCache[searchId] });
+      }
+    }
+
+    res.json({ success: false, message: 'ไม่พบรหัสพนักงานในฐานข้อมูล' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดภายในระบบเซิร์ฟเวอร์' });
+  }
 });
 
 app.get('/api/version', (req, res) => res.json({ version: '1.3.0' }));
