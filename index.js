@@ -136,9 +136,58 @@ app.post('/api/logs/save', async (req, res) => {
   }
 });
 
-// 3. API อื่นๆ แบบพื้นฐานเพื่อให้ระบบทำงานได้ชั่วคราว
+// === ฟังก์ชันสำหรับดึงข้อมูลจาก Sheets ===
+async function fetchWaveDataFromSheets() {
+  if (!isSheetsDbConfigured) return [];
+  try {
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: DB_SPREADSHEET_ID,
+      range: 'Wave_Monitoring!A:ZZ',
+    });
+    const rows = response.data.values;
+    if (!rows || rows.length === 0) return [];
+    
+    const headers = rows[0];
+    const data = rows.slice(1).map((row, index) => {
+      let obj = { _rowIndex: index + 2 };
+      headers.forEach((header, i) => {
+        obj[header] = (row[i] !== undefined && row[i] !== '') ? row[i] : null; 
+      });
+      return obj;
+    });
+    return data;
+  } catch (err) {
+    console.error('❌ อ่านข้อมูล Wave_Monitoring ขัดข้อง:', err.message);
+    return [];
+  }
+}
+
+// 3. API โหลดข้อมูล Wave ขึ้นหน้าจอ Dashboard
 app.get('/api/waves/live', async (req, res) => {
-  res.json([]); // ปล่อยว่างไว้ก่อนเพื่อไม่ให้จอขาว จะมาเพิ่มโค้ดดึงข้อมูลทีหลัง
+  try {
+    if (!isSheetsDbConfigured) return res.json([]);
+    
+    let resultData = await fetchWaveDataFromSheets();
+
+    // ทำความสะอาดตัวเลขและเลข Wave ให้ตรงฟอร์แมตที่หน้าเว็บต้องการ
+    resultData = resultData.map((row) => {
+      let cleanRow = { ...row };
+      if (cleanRow.Wave_Number) {
+        cleanRow.Wave_Number = standardizeWaveId(cleanRow.Wave_Number);
+      }
+      if (cleanRow.Total_Qty) {
+        cleanRow.Total_Qty = parseNumericQty(cleanRow.Total_Qty);
+      }
+      // ดึง Owner_Code มาใช้เป็นกลุ่มแบ่งสี
+      cleanRow.Allocation_Owner_Group = cleanRow.Owner_Code || 'Other';
+      return cleanRow;
+    });
+
+    res.json(resultData);
+  } catch (err) {
+    console.error('❌ ข้อผิดพลาดใน /api/waves/live:', err);
+    res.status(500).json([]);
+  }
 });
 
 app.post('/api/waves/update-status', async (req, res) => {
