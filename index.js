@@ -13,6 +13,31 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ==========================================
+// 🛡️ ระบบเข้าคิวป้องกันข้อมูลชนกัน (Mutex Lock)
+// ==========================================
+class AsyncLock {
+  constructor() {
+    this.queue = [];
+    this.isLocked = false;
+  }
+  async acquire() {
+    if (this.isLocked) {
+      await new Promise(resolve => this.queue.push(resolve));
+    }
+    this.isLocked = true;
+  }
+  release() {
+    if (this.queue.length > 0) {
+      const resolve = this.queue.shift();
+      resolve();
+    } else {
+      this.isLocked = false;
+    }
+  }
+}
+const sheetLock = new AsyncLock(); // ใช้คุมการเขียน Sheets ทุกครั้ง
+
+// ==========================================
 // ⚙️ การตั้งค่า Google Sheets
 // ==========================================
 const DB_SPREADSHEET_ID = '1TL-tj-BrvYM7i_wNHlA0x641_VOqfT9SLpmm2NZATOo';
@@ -28,7 +53,7 @@ if (fs.existsSync(keyFilePath)) {
   sheets = google.sheets({ version: 'v4', auth: sheetsAuth });
   isSheetsDbConfigured = true;
   console.log('✅ โหลดการตั้งค่า Google Sheets สำเร็จ');
-  initSheetsHeaders(); // สร้างหัวตารางอัตโนมัติ
+  initSheetsHeaders(); 
 } else {
   console.warn('⚠️ ไม่พบไฟล์ key.json ระบบอาจทำงานไม่สมบูรณ์');
 }
@@ -75,13 +100,12 @@ async function initSheetsHeaders() {
           valueInputOption: 'USER_ENTERED',
           requestBody: { values: [headers] },
         });
-        console.log(`✅ สร้างหัวตารางสำหรับ ${sheetName} สำเร็จ`);
       }
     };
 
     await checkAndSetHeaders('Wave_Monitoring', waveHeaders);
     await checkAndSetHeaders('System_Logs', logHeaders);
-    await checkAndSetHeaders('Dashboard_Summary', SUMMARY_HEADERS); // สร้างหัวตาราง Dashboard_Summary
+    await checkAndSetHeaders('Dashboard_Summary', SUMMARY_HEADERS);
   } catch (error) {
     console.error('❌ ตรวจสอบหัวตาราง Google Sheets ไม่สำเร็จ:', error.message);
   }
@@ -104,23 +128,21 @@ async function updateDashboardSummary(dbWaves) {
       let targetMs = null;
       if (w.Planned_Load_Date) {
         const timeStr = (w.Planned_Load_Time || '00:00').trim();
-        // จัดฟอร์แมตให้เป็น HH:mm:ss
         const formattedTime = timeStr.length === 5 ? timeStr + ':00' : timeStr;
-        // 🟢 ผูกวันที่และเวลารวมกันเป็น YYYY-MM-DDTHH:mm:ss+07:00
         const d = new Date(`${w.Planned_Load_Date}T${formattedTime}+07:00`);
         if (!isNaN(d.getTime())) targetMs = d.getTime();
       }
 
-      // 🟢 ฟังก์ชันเช็คว่า On-Time หรือ Late โดยเทียบวัน+เวลาเต็ม
       const checkSLA = (actualTimeStr, minusMins) => {
         if (!actualTimeStr || actualTimeStr === '-' || actualTimeStr === '') return 'Pending';
         
-        // แปลงเวลาให้เป็น Date object
-        const actualDate = new Date(actualTimeStr);
+        let cleanTimeStr = actualTimeStr.trim().replace(' ', 'T');
+        if (cleanTimeStr.length === 19) cleanTimeStr += '+07:00'; 
+
+        const actualDate = new Date(cleanTimeStr);
         if (isNaN(actualDate.getTime())) return 'Pending';
-        if (!targetMs) return 'No_Plan'; // ไม่มีเวลาแผนโหลด
+        if (!targetMs) return 'No_Plan'; 
         
-        // หักเวลาล่วงหน้าจากเป้าหมายเป็นมิลลิวินาที
         const slaLimitTime = targetMs - (minusMins * 60000); 
         return actualDate.getTime() <= slaLimitTime ? 'On-Time' : 'Late';
       };
@@ -128,12 +150,12 @@ async function updateDashboardSummary(dbWaves) {
       return [
         w.Wave_Number || '', w.Planned_Load_Date || '', w.Planned_Load_Time || '', 
         w.Transporter || '', w.Vehicle_Type || '', w.Owner_Code || '', w.Total_Qty || 0,
-        w.Status_Allocate || '', checkSLA(w.Time_Allocate, 180), // จ่ายงาน (SLA 3 ชม.)
-        w.Status_Print || '', checkSLA(w.Time_Print, 120),       // พิมพ์ LPN (SLA 2 ชม.)
-        w.Status_Pick || '', checkSLA(w.Picked_Complete_Timestamp, 90), // หยิบ (SLA 1.5 ชม.)
-        w.Status_Check || '', checkSLA(w.QC_Complete_Timestamp, 30),    // QC (SLA 30 นาที)
-        w.Status_Truck || '', checkSLA(w.Hist_Truck_Time, 15),          // รถเข้า (SLA 15 นาที)
-        w.Status_Load || '', checkSLA(w.Hist_Load_Time, 0)              // โหลดเสร็จ (SLA 0 นาที)
+        w.Status_Allocate || '', checkSLA(w.Time_Allocate, 180), 
+        w.Status_Print || '', checkSLA(w.Time_Print, 120),       
+        w.Status_Pick || '', checkSLA(w.Picked_Complete_Timestamp, 90), 
+        w.Status_Check || '', checkSLA(w.QC_Complete_Timestamp, 30),    
+        w.Status_Truck || '', checkSLA(w.Hist_Truck_Time, 15),          
+        w.Status_Load || '', checkSLA(w.Hist_Load_Time, 0)              
       ];
     });
 
@@ -150,7 +172,6 @@ async function updateDashboardSummary(dbWaves) {
       valueInputOption: 'USER_ENTERED',
       requestBody: { values },
     });
-    console.log('✅ อัปเดต Dashboard_Summary (On-Time) วัดจากวันที่+เวลา สำเร็จ');
   } catch (err) {
     console.error('❌ อัปเดต Dashboard_Summary ขัดข้อง:', err.message);
   }
@@ -176,15 +197,16 @@ app.get('/api/logs', async (req, res) => {
       waveId: row[2] || '',
       action: row[3] || ''
     }));
-    logs = logs.reverse().slice(0, 300);
+    logs = logs.reverse().slice(0, 300); 
     res.json(logs);
   } catch (err) {
-    console.error('❌ ดึง Logs ขัดข้อง:', err.message);
     res.json([]);
   }
 });
 
+// บันทึก Log จะใช้ lock ด้วยป้องกันการชน
 app.post('/api/logs/save', async (req, res) => {
+  await sheetLock.acquire();
   try {
     if (!isSheetsDbConfigured) return res.json({ success: true });
     const rowData = [
@@ -202,8 +224,9 @@ app.post('/api/logs/save', async (req, res) => {
     });
     res.json({ success: true });
   } catch (e) {
-    console.error('❌ บันทึก Log ไม่สำเร็จ:', e.message);
     res.status(500).json({ success: false });
+  } finally {
+    sheetLock.release();
   }
 });
 
@@ -234,22 +257,20 @@ async function fetchWaveDataFromSheets() {
     });
     return data;
   } catch (err) {
-    console.error('❌ อ่านข้อมูล Wave_Monitoring ขัดข้อง:', err.message);
     return [];
   }
 }
 
-// 🟢 ระบบ Cache สำหรับ /api/waves/live เพื่อรองรับการใช้งานพร้อมกันหลายคน
+// 🟢 ระบบ Cache สำหรับโหลดสด ป้องกันกระตุก
 let waveDataCache = null;
 let waveDataLastFetch = 0;
-const CACHE_TTL = 10000; // 10 วินาที
+const CACHE_TTL = 10000; 
 
 app.get('/api/waves/live', async (req, res) => {
   try {
     if (!isSheetsDbConfigured) return res.json([]);
     
     const now = Date.now();
-    // 🟢 ถ้าแคชยังไม่หมดอายุ (10 วิ) ให้ใช้ข้อมูลเดิม ลดภาระ Google Sheets ป้องกันจอกระตุก
     if (waveDataCache && (now - waveDataLastFetch < CACHE_TTL)) {
       return res.json(waveDataCache);
     }
@@ -258,30 +279,24 @@ app.get('/api/waves/live', async (req, res) => {
 
     resultData = resultData.map((row) => {
       let cleanRow = { ...row };
-      if (cleanRow.Wave_Number) {
-        cleanRow.Wave_Number = standardizeWaveId(cleanRow.Wave_Number);
-      }
-      if (cleanRow.Total_Qty) {
-        cleanRow.Total_Qty = parseNumericQty(cleanRow.Total_Qty);
-      }
+      if (cleanRow.Wave_Number) cleanRow.Wave_Number = standardizeWaveId(cleanRow.Wave_Number);
+      if (cleanRow.Total_Qty) cleanRow.Total_Qty = parseNumericQty(cleanRow.Total_Qty);
       cleanRow.Allocation_Owner_Group = cleanRow.Owner_Code || 'Other';
       return cleanRow;
     });
 
-    // อัปเดต Cache
     waveDataCache = resultData;
     waveDataLastFetch = now;
-
     res.json(resultData);
   } catch (err) {
-    console.error('❌ ข้อผิดพลาดใน /api/waves/live:', err);
-    // ถ้าดึงข้อมูลผิดพลาด แต่มี Cache เก่าอยู่ ให้ส่งข้อมูลเก่าไปก่อน
     if (waveDataCache) return res.json(waveDataCache);
     res.status(500).json([]);
   }
 });
 
+// === API อัปเดตสถานะงานกลับลง Google Sheets ===
 app.post('/api/waves/update-status', async (req, res) => {
+  await sheetLock.acquire(); // 🛡️ ล็อกเพื่อไม่ให้ใครเขียนทับพร้อมกัน
   try {
     if (!isSheetsDbConfigured) return res.json({ success: true });
 
@@ -368,7 +383,8 @@ app.post('/api/waves/update-status', async (req, res) => {
                   let timeVal = '';
                   if (step.status !== 'pending' && step.status !== 'reverted' && step.actualTimestamp && step.actualTimestamp !== '-') {
                     const d = new Date(Number(step.actualTimestamp));
-                    timeVal = d.toISOString();
+                    // เซฟลง Google Sheets ให้มี T ตาม format YYYY-MM-DDTHH:mm:ss
+                    timeVal = d.toLocaleString('en-CA', { hour12: false, timeZone: 'Asia/Bangkok' }).replace(', ', 'T');
                   }
                   updateData.push({
                     range: `Wave_Monitoring!${getColLetter(timeColIdx)}${rowIndex}`,
@@ -390,7 +406,8 @@ app.post('/api/waves/update-status', async (req, res) => {
                     }
                     if (loadStartColIdx > -1 && step.doingDateObj && step.doingDateObj !== '-') {
                       const dStart = new Date(Number(step.doingDateObj));
-                      updateData.push({ range: `Wave_Monitoring!${getColLetter(loadStartColIdx)}${rowIndex}`, values: [[dStart.toISOString()]] });
+                      const startVal = dStart.toLocaleString('en-CA', { hour12: false, timeZone: 'Asia/Bangkok' }).replace(', ', 'T');
+                      updateData.push({ range: `Wave_Monitoring!${getColLetter(loadStartColIdx)}${rowIndex}`, values: [[startVal]] });
                     }
                   }
                   if (licenseColIdx > -1 && waveUpdate.licensePlate) {
@@ -412,18 +429,19 @@ app.post('/api/waves/update-status', async (req, res) => {
           data: updateData,
         },
       });
-      console.log(`✅ อัปเดตข้อมูลสำเร็จ: ${updateData.length} เซลล์`);
 
-      // 📊 ซิงค์ Dashboard_Summary และล้างแคชให้ 10 คนเห็นข้อมูลพร้อมกัน
+      // 📊 ซิงค์ Dashboard_Summary และล้างแคชเพื่อให้ 10 คนเห็นพร้อมกัน
       const updatedWaves = await fetchWaveDataFromSheets();
       await updateDashboardSummary(updatedWaves);
-      waveDataCache = null; // 🟢 ล้าง Cache เมื่อมีการแก้ไขสเตตัส
+      waveDataCache = null; // 🟢 ล้าง Cache 
     }
 
     res.json({ success: true });
   } catch (err) {
     console.error('❌ อัปเดตสถานะขัดข้อง:', err.message);
     res.status(500).json({ success: false, message: err.toString() });
+  } finally {
+    sheetLock.release(); // 🛡️ คืนกุญแจให้คิวต่อไป
   }
 });
 
@@ -460,11 +478,8 @@ app.post('/api/verify-employee', async (req, res) => {
               }
             });
             lastCacheTime = now;
-            console.log(`✅ โหลดข้อมูลพนักงานสำเร็จ: ${Object.keys(employeeCache).length} คน`);
           }
-        } catch (sheetErr) {
-          console.error('❌ ดึงข้อมูลพนักงานไม่สำเร็จ:', sheetErr.message);
-        }
+        } catch (sheetErr) {}
       }
 
       if (employeeCache && employeeCache[searchId]) {
@@ -474,20 +489,18 @@ app.post('/api/verify-employee', async (req, res) => {
 
     res.json({ success: false, message: 'ไม่พบรหัสพนักงานในฐานข้อมูล' });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดภายในระบบเซิร์ฟเวอร์' });
+    res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาด' });
   }
 });
 
-app.get('/api/version', (req, res) => res.json({ version: '1.3.0' }));
+app.get('/api/version', (req, res) => res.json({ version: '1.3.1' }));
 app.get('/api/settings', (req, res) => res.json({}));
 
 app.post('/api/waves/bulk-insert', async (req, res) => {
+  await sheetLock.acquire(); // 🛡️ ล็อกเพื่อไม่ให้ใครเขียนทับพร้อมกัน
   try {
     const sheetData = req.body; 
-    
-    if (!sheetData || sheetData.length === 0) {
-      return res.status(400).json({ success: false, message: 'ไม่พบข้อมูล' });
-    }
+    if (!sheetData || sheetData.length === 0) return res.status(400).json({ success: false, message: 'ไม่พบข้อมูล' });
 
     if (isSheetsDbConfigured) {
       const response = await sheets.spreadsheets.values.get({
@@ -513,21 +526,19 @@ app.post('/api/waves/bulk-insert', async (req, res) => {
       // 📊 ซิงค์ Dashboard_Summary และล้างแคช
       const updatedWaves = await fetchWaveDataFromSheets();
       await updateDashboardSummary(updatedWaves);
-      waveDataCache = null; // 🟢 ล้าง Cache เมื่อแผนงานเปลี่ยน
+      waveDataCache = null; // 🟢 ล้าง Cache 
     }
 
-    return res.json({ 
-      success: true, 
-      plannedWavesUpdated: sheetData.length,
-      message: `นำเข้าข้อมูลเรียบร้อยแล้วจำนวน ${sheetData.length} รายการ` 
-    });
+    return res.json({ success: true, plannedWavesUpdated: sheetData.length, message: `นำเข้าสำเร็จ` });
   } catch (err) {
-    console.error('❌ นำเข้าข้อมูลขัดข้อง:', err.message);
     return res.status(500).json({ success: false, message: err.message });
+  } finally {
+    sheetLock.release(); // 🛡️
   }
 });
 
 app.post('/api/wms-204/bulk', async (req, res) => {
+  await sheetLock.acquire(); // 🛡️ ล็อกเพื่อไม่ให้ใครเขียนทับพร้อมกัน
   try {
     if (!isSheetsDbConfigured) return res.json({ success: true });
 
@@ -595,24 +606,66 @@ app.post('/api/wms-204/bulk', async (req, res) => {
           data: updateData,
         },
       });
-      console.log(`✅ อัปเดตข้อมูล 204 สำเร็จ: ${updateData.length} เซลล์`);
       waveDataCache = null; // 🟢 ล้าง Cache เมื่ออัปเดต 204
     }
 
     return res.json({ success: true, message: 'บันทึกข้อมูล 204 ลง Google Sheets สำเร็จ' });
   } catch (err) {
-    console.error('❌ อัปเดต 204 ขัดข้อง:', err.message);
     return res.status(500).json({ success: false, message: err.message });
+  } finally {
+    sheetLock.release(); // 🛡️
+  }
+});
+
+app.post('/api/waves/delete-id', async (req, res) => {
+  await sheetLock.acquire();
+  try {
+    let cleanId = getWaveNumberNoZero(req.body.waveId);
+    let dbWaves = await fetchWaveDataFromSheets();
+    let originalLength = dbWaves.length;
+    
+    dbWaves = dbWaves.filter(w => getWaveNumberNoZero(w.Wave_Number) !== cleanId);
+    
+    if (dbWaves.length !== originalLength && isSheetsDbConfigured) {
+       await writeSheet('Wave_Monitoring', dbWaves, WAVES_HEADERS);
+       await updateDashboardSummary(dbWaves);
+       waveDataCache = null;
+    }
+    res.json({ success: true });
+  } catch (err) { 
+    res.json({ success: false, message: err.toString() }); 
+  } finally {
+    sheetLock.release();
+  }
+});
+
+app.post('/api/waves/delete', async (req, res) => {
+  await sheetLock.acquire();
+  try {
+    const dateStr = String(req.body.dateStr || '').trim();
+    let dbWaves = await fetchWaveDataFromSheets();
+    let originalLength = dbWaves.length;
+    
+    dbWaves = dbWaves.filter((w) => String(w.Planned_Pick_Date).slice(0, 10) !== dateStr);
+    
+    if (dbWaves.length !== originalLength && isSheetsDbConfigured) {
+       await writeSheet('Wave_Monitoring', dbWaves, WAVES_HEADERS);
+       await updateDashboardSummary(dbWaves);
+       waveDataCache = null;
+    }
+    res.json({ success: true });
+  } catch (err) { 
+    res.json({ success: false, message: err.toString() }); 
+  } finally {
+    sheetLock.release();
   }
 });
 
 let last204TimeStr = 'ยังไม่ได้อัปเดต';
-
 app.post('/api/update-204-time', (req, res) => {
   last204TimeStr = req.body.time || last204TimeStr;
   res.json({ success: true, time: last204TimeStr });
 });
-
 app.get('/api/last-204-time', (req, res) => {
   res.json({ time: last204TimeStr });
 });
@@ -620,8 +673,6 @@ app.get('/api/last-204-time', (req, res) => {
 app.post('/api/sync-tms-sheet', async (req, res) => {
   res.json({ success: true, message: 'ซิงค์ข้อมูลสำเร็จ', updatedCount: 0 });
 });
-
-// ==========================================
 
 app.get(/.*/, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
