@@ -860,7 +860,7 @@ app.post('/api/settings/save', (req, res) => {
   }
 });
 
-app.get('/api/version', (req, res) => res.json({ version: '1.2.82' }));
+app.get('/api/version', (req, res) => res.json({ version: '1.3.0' }));
 
 app.get('/api/last-204-time', (req, res) => {
   res.json({ time: defaultSettings.last204Time || 'ยังไม่ได้อัปเดต' });
