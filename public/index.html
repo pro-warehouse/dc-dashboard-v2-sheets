@@ -5026,15 +5026,15 @@
                     pieces: imported204.pieces,
                   });
                   
-                  // 🟢 ฟีเจอร์ใหม่: ปิดงานอัตโนมัติถ้ายอดชิ้นเป็น 0
+                  // 🟢 ฟีเจอร์: ปิดงานอัตโนมัติถ้ายอดชิ้นเป็น 0 (ยกเว้น QC ที่ต้องให้คนกดเอง)
                   if (imported204.pieces === 0) {
                     let autoClosed = false;
                     const ts = Date.now();
                     const actualDateObj = new Date(ts);
                     const actualTime = actualDateObj.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', hour12: false });
                     
-                    // ปิดสเตป 1-4 ให้เป็น done อัตโนมัติ (จ่ายงาน, พิมพ์, หยิบ, QC)
-                    ['allocate', 'print', 'pick', 'check'].forEach(stepKey => {
+                    // ปิดสเตป 1-3 ให้เป็น done อัตโนมัติ (จ่ายงาน, พิมพ์LPN, หยิบ) *เอา 'check' ออก
+                    ['allocate', 'print', 'pick'].forEach(stepKey => {
                       const step = w.steps.find(s => s.key === stepKey);
                       if (step && step.status !== 'done') {
                         step.status = 'done';
@@ -5053,7 +5053,7 @@
                     
                     if (autoClosed) {
                       // แสตมป์ลงประวัติการทำงาน (Logs)
-                      this.addLog(w.id, 'AUTO-CLOSE', 'ปิดงานโดยระบบ (ยอดชิ้นเป็น 0)');
+                      this.addLog(w.id, 'AUTO-CLOSE', 'ปิดงานหยิบโดยระบบ (ยอดชิ้น 0) รอคนกด QC');
                     }
                   }
 
