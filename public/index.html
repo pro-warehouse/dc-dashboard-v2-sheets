@@ -3522,14 +3522,23 @@
         getDisplayTotalPieces(wave) {
           if (!wave) return 0;
           const wmsStatus = String(wave.wmsStatus || '').toUpperCase();
+          
           if (wmsStatus.includes('SHIP COMPLETED') || wmsStatus.includes('PICK COMPLETED')) return 0;
-          if (wmsStatus.includes('WAVE CREATED')) {
-            return this.parseNumericQty(wave.wmsTotalQty);
+          
+          const totalQ = this.parseNumericQty(wave.wmsTotalQty);
+          const allocQ = this.parseNumericQty(wave.wmsAllocatedQty);
+          const fallbackQ = this.parseNumericQty(wave.totalPieces);
+          
+          if (wmsStatus.includes('WAVE CREATED') || wmsStatus.includes('NEW') || wmsStatus.includes('CREATED')) {
+            return totalQ > 0 ? totalQ : fallbackQ;
           }
+          
           if (wmsStatus.includes('ALLOCATED') || wmsStatus.includes('PICKING')) {
-            return this.parseNumericQty(wave.wmsAllocatedQty);
+            return allocQ > 0 ? allocQ : (totalQ > 0 ? totalQ : fallbackQ);
           }
-          return 0;
+          
+          // ถ้าไม่ตรงเงื่อนไขเลย ให้ดึงค่า Total_Qty จากไฟล์แผนงานดั้งเดิมมาโชว์ (ไม่ให้เป็น 0)
+          return fallbackQ > 0 ? fallbackQ : (totalQ > 0 ? totalQ : 0);
         },
 
         getRawRowsPieces(wave) {
@@ -4957,19 +4966,25 @@
                   .replace(/^Wave-?/i, '')
                   .replace(/^0+/, '') || '0');
                 const wStatus = String(row[statusIdx] || '').trim().toUpperCase();
+                
                 const totalQ = this.parseNumericQty(totalQtySourceIdx >= 0 ? row[totalQtySourceIdx] : 0);
-                const allocQ = this.parseNumericQty(allocQtyIdx >= 0 ? row[allocQtyIdx] : 0);
+                
+                // 🟢 ดึง Allocated ถ้าเป็น 0 ให้เอา Total มาใช้แทน
+                let allocQ = this.parseNumericQty(allocQtyIdx >= 0 ? row[allocQtyIdx] : 0);
+                if (allocQ === 0 && totalQ > 0) allocQ = totalQ;
+
                 const pickQ = this.parseNumericQty(pickQtyIdx >= 0 ? row[pickQtyIdx] : 0);
                 const shipQ = this.parseNumericQty(shipQtyIdx >= 0 ? row[shipQtyIdx] : 0);
 
                 let pieces = 0;
                 if (wStatus.includes('SHIP COMPLETED') || wStatus.includes('PICK COMPLETED')) {
                   pieces = 0;
-                } else if (wStatus.includes('WAVE CREATED')) {
+                } else if (wStatus.includes('WAVE CREATED') || wStatus.includes('NEW') || wStatus.includes('CREATED')) {
                   pieces = totalQ;
-                } else if (wStatus.includes('ALLOCATED') || wStatus.includes('PICKING')) {
-                  pieces = allocQ;
+                } else {
+                  pieces = allocQ; // ใช้ยอด Alloc (ซึ่งถ้าเป็น 0 จะถูกแทนด้วย totalQ ข้างบนแล้ว)
                 }
+                
                 tempData[cleanWaveNo] = { pieces, status: wStatus, totalQ, allocQ, pickQ, shipQ };
               }
 
