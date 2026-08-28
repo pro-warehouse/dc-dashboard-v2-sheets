@@ -388,3 +388,90 @@ app.get(/.*/, (req, res) => {
 app.listen(port, () =>
   console.log(`🚀 V2 Server is running on port ${port}`)
 );
+
+// === 1. API สำหรับปุ่ม "นำเข้าแผนงาน" (Import Excel) ===
+app.post('/api/upload-excel', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'กรุณาเลือกไฟล์ Excel' });
+    }
+
+    // อ่านไฟล์ Excel ที่อัปโหลดเข้ามา
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const sheetData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+    if (!sheetData || sheetData.length === 0) {
+      return res.status(400).json({ success: false, message: 'ไม่พบข้อมูลในไฟล์ Excel' });
+    }
+
+    if (isSheetsDbConfigured) {
+      // ดึงหัวตารางปัจจุบันจาก Google Sheets
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId: DB_SPREADSHEET_ID,
+        range: 'Wave_Monitoring!1:1',
+      });
+      
+      const headers = response.data.values ? response.data.values[0] : [];
+      
+      // แปลงข้อมูลจาก Excel ให้ตรงกับช่องใน Google Sheets
+      const rowsToAdd = sheetData.map(row => {
+        return headers.map(header => {
+          return row[header] !== undefined ? String(row[header]) : '';
+        });
+      });
+
+      // นำข้อมูลใหม่ไปต่อท้ายตาราง (Append) ใน Google Sheets
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: DB_SPREADSHEET_ID,
+        range: 'Wave_Monitoring!A1',
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: rowsToAdd,
+        },
+      });
+    }
+
+    return res.json({ success: true, message: `นำเข้าข้อมูลเรียบร้อยแล้วจำนวน ${sheetData.length} รายการ` });
+  } catch (err) {
+    console.error('❌ นำเข้าไฟล์ Excel ขัดข้อง:', err.message);
+    return res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในการนำเข้าไฟล์: ' + err.message });
+  }
+});
+
+// === 2. API สำหรับปุ่ม "Import 204" ===
+app.post('/api/import-204', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'กรุณาเลือกไฟล์สำหรับ 204' });
+    }
+
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const sheetData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+    if (isSheetsDbConfigured && sheetData.length > 0) {
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId: DB_SPREADSHEET_ID,
+        range: 'Wave_Monitoring!1:1',
+      });
+      
+      const headers = response.data.values ? response.data.values[0] : [];
+      const rowsToAdd = sheetData.map(row => {
+        return headers.map(header => row[header] !== undefined ? String(row[header]) : '');
+      });
+
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: DB_SPREADSHEET_ID,
+        range: 'Wave_Monitoring!A1',
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: rowsToAdd },
+      });
+    }
+
+    return res.json({ success: true, message: 'นำเข้าข้อมูล 204 สำเร็จ' });
+  } catch (err) {
+    console.error('❌ Import 204 ขัดข้อง:', err.message);
+    return res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในการนำเข้า 204: ' + err.message });
+  }
+});
