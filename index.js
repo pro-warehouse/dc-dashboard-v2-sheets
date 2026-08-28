@@ -434,7 +434,7 @@ app.post('/api/settings/save', (req, res) => {
   res.json({ success: true });
 });
 
-app.get('/api/version', (req, res) => res.json({ version: '1.2.82' }));
+app.get('/api/version', (req, res) => res.json({ version: '1.3.0' }));
 app.get('/api/last-204-time', (req, res) => res.json({ time: defaultSettings.last204Time || 'ยังไม่ได้อัปเดต' }));
 app.post('/api/update-204-time', (req, res) => {
   defaultSettings.last204Time = new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
