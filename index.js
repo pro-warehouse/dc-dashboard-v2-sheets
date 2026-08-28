@@ -568,7 +568,7 @@ app.post('/api/verify-employee', async (req, res) => {
   }
 });
 
-app.get('/api/version', (req, res) => res.json({ version: '1.4.0' }));
+app.get('/api/version', (req, res) => res.json({ version: '1.3.1' }));
 app.get('/api/settings', (req, res) => res.json(defaultSettings));
 
 // 🟢 อัปเดต Settings แล้วเซฟลงชีตอัตโนมัติ
