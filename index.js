@@ -4,8 +4,18 @@ const { google } = require('googleapis');
 const path = require('path');
 const fs = require('fs');
 
+// 🟢 1. นำเข้าไลบรารี multer และ xlsx
+const multer = require('multer');
+const XLSX = require('xlsx');
+
+// 🟢 2. ตั้งค่า multer ให้เก็บไฟล์ไว้ในหน่วยความจำ (Memory Storage) 
+// เพื่อให้โค้ดของคุณสามารถดึง req.file.buffer ไปใช้งานต่อได้
+const upload = multer({ storage: multer.memoryStorage() });
+
 const app = express();
 const port = process.env.PORT || 3000;
+
+// ... โค้ดส่วนอื่นๆ ที่เหลือคงเดิม ...
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
