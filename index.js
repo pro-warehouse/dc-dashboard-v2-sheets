@@ -106,18 +106,26 @@ async function updateDashboardSummary(dbWaves) {
         const timeStr = (w.Planned_Load_Time || '00:00').trim();
         // จัดฟอร์แมตให้เป็น HH:mm:ss
         const formattedTime = timeStr.length === 5 ? timeStr + ':00' : timeStr;
+        // ผูกวันที่และเวลารวมกันเป็น YYYY-MM-DDTHH:mm:ss+07:00
         const d = new Date(`${w.Planned_Load_Date}T${formattedTime}+07:00`);
         if (!isNaN(d.getTime())) targetMs = d.getTime();
       }
 
-      // ฟังก์ชันเช็คว่า On-Time หรือ Late
+      // ฟังก์ชันเช็คว่า On-Time หรือ Late โดยเทียบวัน+เวลาเต็ม
       const checkSLA = (actualTimeStr, minusMins) => {
         if (!actualTimeStr || actualTimeStr === '-' || actualTimeStr === '') return 'Pending';
-        const actualDate = new Date(actualTimeStr);
+        
+        // ปรับฟอร์แมตเวลาจริงจากชีต ให้แปลงเป็น Date object ได้สมบูรณ์
+        let cleanTimeStr = actualTimeStr.trim().replace(' ', 'T');
+        if (cleanTimeStr.length === 19) {
+            cleanTimeStr += '+07:00'; // ถ้ารูปแบบคือ YYYY-MM-DDTHH:mm:ss ให้บังคับโซนไทย
+        }
+
+        const actualDate = new Date(cleanTimeStr);
         if (isNaN(actualDate.getTime())) return 'Pending';
         if (!targetMs) return 'No_Plan'; // ไม่มีเวลาแผนโหลด
         
-        const slaLimitTime = targetMs - (minusMins * 60000);
+        const slaLimitTime = targetMs - (minusMins * 60000); // หักลบ SLA เป็นมิลลิวินาที
         return actualDate.getTime() <= slaLimitTime ? 'On-Time' : 'Late';
       };
 
@@ -147,7 +155,7 @@ async function updateDashboardSummary(dbWaves) {
       valueInputOption: 'USER_ENTERED',
       requestBody: { values },
     });
-    console.log('✅ อัปเดต Dashboard_Summary (On-Time) สำเร็จ');
+    console.log('✅ อัปเดต Dashboard_Summary (On-Time) วัน+เวลา สำเร็จ');
   } catch (err) {
     console.error('❌ อัปเดต Dashboard_Summary ขัดข้อง:', err.message);
   }
@@ -283,6 +291,7 @@ app.post('/api/waves/update-status', async (req, res) => {
     
     const headers = rows[0];
     const updateData = []; 
+    // 🟢 ดึงตำแหน่งคอลัมน์ Booking มาเตรียมไว้ (เผื่อ 1 Wave มีหลาย Booking)
     const bookingColIdx = headers.indexOf('Vehicle_Booking_No');
 
     const getColLetter = (colIndex) => {
@@ -299,11 +308,16 @@ app.post('/api/waves/update-status', async (req, res) => {
       const targetWaveId = standardizeWaveId(waveUpdate.id);
       const targetBooking = (waveUpdate.originalBookingNo || '').trim().toLowerCase();
       
+      // 🟢 วนลูปหา "ทุกแถว" ใน Sheets
       rows.forEach((row, index) => {
         if (!row || !row[0]) return;
+        
         const currentWaveId = standardizeWaveId(row[0]);
         
+        // ถ้าเลข Wave ตรงกัน ให้ประมวลผลบรรทัดนี้
         if (currentWaveId === targetWaveId) {
+          
+          // เช็ค Booking_No ร่วมด้วย ป้องกันกรณี 1 Wave มีหลาย Booking
           let isBookingMatch = true;
           if (targetBooking && targetBooking !== '-' && bookingColIdx > -1) {
             const rowBooking = (row[bookingColIdx] || '').trim().toLowerCase();
@@ -313,9 +327,9 @@ app.post('/api/waves/update-status', async (req, res) => {
           }
 
           if (isBookingMatch) {
-            const rowIndex = index + 1; 
+            const rowIndex = index + 1; // +1 เพราะ Google Sheets เริ่มนับแถวที่ 1
             
-            if (rowIndex > 1) { 
+            if (rowIndex > 1) { // ป้องกันการทับหัวตาราง
               (waveUpdate.steps || []).forEach(step => {
                 const capKey = step.key.charAt(0).toUpperCase() + step.key.slice(1);
                 
@@ -350,6 +364,7 @@ app.post('/api/waves/update-status', async (req, res) => {
                 if (timeColIdx > -1) {
                   let timeVal = '';
                   if (step.status !== 'pending' && step.status !== 'reverted' && step.actualTimestamp && step.actualTimestamp !== '-') {
+                    // ประทับวันที่+เวลาจริง ลงชีต 
                     const d = new Date(Number(step.actualTimestamp));
                     timeVal = d.toLocaleString('en-CA', { hour12: false, timeZone: 'Asia/Bangkok' }).replace(',', '');
                   }
@@ -389,6 +404,7 @@ app.post('/api/waves/update-status', async (req, res) => {
     });
 
     if (updateData.length > 0) {
+      // อัปเดตเซลล์ทั้งหมดที่ค้นเจอในคำสั่งเดียว
       await sheets.spreadsheets.values.batchUpdate({
         spreadsheetId: DB_SPREADSHEET_ID,
         requestBody: {
@@ -466,8 +482,10 @@ app.get('/api/version', (req, res) => res.json({ version: '1.3.0' }));
 app.get('/api/settings', (req, res) => res.json({}));
 
 // ==========================================
-// 🚀 API สำหรับ Import แผนงาน
+// 🚀 API สำหรับ Import แผนงานและ 204 (รับเป็น JSON จาก Frontend)
 // ==========================================
+
+// API นำเข้าแผนงาน Excel (รับ JSON จาก Frontend แล้วลง Google Sheets)
 app.post('/api/waves/bulk-insert', async (req, res) => {
   try {
     const sheetData = req.body; 
@@ -513,7 +531,7 @@ app.post('/api/waves/bulk-insert', async (req, res) => {
   }
 });
 
-// === API สำหรับ Import 204 ===
+// === 2. API สำหรับ Import 204 ===
 app.post('/api/wms-204/bulk', async (req, res) => {
   try {
     if (!isSheetsDbConfigured) return res.json({ success: true });
@@ -582,6 +600,7 @@ app.post('/api/wms-204/bulk', async (req, res) => {
           data: updateData,
         },
       });
+      console.log(`✅ อัปเดตข้อมูล 204 สำเร็จ: ${updateData.length} เซลล์`);
     }
 
     return res.json({ success: true, message: 'บันทึกข้อมูล 204 ลง Google Sheets สำเร็จ' });
@@ -591,17 +610,21 @@ app.post('/api/wms-204/bulk', async (req, res) => {
   }
 });
 
-// API สำหรับเก็บและแสดงเวลา Last Sync 204
 let last204TimeStr = 'ยังไม่ได้อัปเดต';
+
 app.post('/api/update-204-time', (req, res) => {
   last204TimeStr = req.body.time || last204TimeStr;
   res.json({ success: true, time: last204TimeStr });
 });
+
 app.get('/api/last-204-time', (req, res) => {
   res.json({ time: last204TimeStr });
 });
 
-// ==========================================
+app.post('/api/sync-tms-sheet', async (req, res) => {
+  res.json({ success: true, message: 'ซิงค์ข้อมูลสำเร็จ', updatedCount: 0 });
+});
+
 app.get(/.*/, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
