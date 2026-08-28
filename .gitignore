@@ -1,0 +1,16 @@
+# 🔒 ห้าม push ไฟล์ความลับขึ้น GitHub เด็ดขาด
+key.json
+*.json.key
+.env
+.env.*
+
+# โฟลเดอร์ที่ไม่จำเป็นต้อง push
+node_modules/
+.agents/
+
+# ไฟล์ระบบ
+.DS_Store
+Thumbs.db
+
+# Settings ที่ generate เองในเครื่อง
+settings.json
