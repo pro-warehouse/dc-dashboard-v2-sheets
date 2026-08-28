@@ -61,6 +61,20 @@ if (fs.existsSync(keyFilePath)) {
 // ==========================================
 // 🛠️ ฟังก์ชันตั้งค่าตาราง & Helper
 // ==========================================
+
+const WAVES_HEADERS = [
+  'Wave_Number', 'Planned_Pick_Date', 'Planned_Pick_Time', 'Planned_Load_Date', 'Planned_Load_Time',
+  'Trip_No', 'Transporter', 'Vehicle_Type', 'Vehicle_Booking_No', 'Branch_Name', 'Branch_Code',
+  'Order_Number', 'Owner_Code', 'Order_Type', 'Is_HUB', 'Time_Change_Count', 'Total_Qty',
+  'Status_Allocate', 'User_Allocate', 'Time_Allocate',
+  'Status_Print', 'User_Print', 'Time_Print',
+  'Status_Pick', 'User_Pick', 'Picked_Complete_Timestamp',
+  'Status_Check', 'User_Check', 'QC_Complete_Timestamp',
+  'Status_Truck', 'User_Truck', 'Hist_Truck_Time',
+  'Status_Load', 'User_Load', 'Hist_Load_Time', 'Time_Load_Start', 'Dock_Door', 'License_Plate',
+  'Created_At', 'Imported_At', 'Is_Urgent'
+];
+
 const SUMMARY_HEADERS = [
   'Wave_Number', 'Planned_Load_Date', 'Planned_Load_Time', 'Transporter', 'Vehicle_Type', 'Owner_Code', 'Total_Qty',
   'Allocate_Status', 'Allocate_OnTime',
@@ -74,18 +88,6 @@ const SUMMARY_HEADERS = [
 async function initSheetsHeaders() {
   if (!isSheetsDbConfigured) return;
   try {
-    const waveHeaders = [
-      'Wave_Number', 'Planned_Pick_Date', 'Planned_Pick_Time', 'Planned_Load_Date', 'Planned_Load_Time',
-      'Trip_No', 'Transporter', 'Vehicle_Type', 'Vehicle_Booking_No', 'Branch_Name', 'Branch_Code',
-      'Order_Number', 'Owner_Code', 'Order_Type', 'Is_HUB', 'Time_Change_Count', 'Total_Qty',
-      'Status_Allocate', 'User_Allocate', 'Time_Allocate',
-      'Status_Print', 'User_Print', 'Time_Print',
-      'Status_Pick', 'User_Pick', 'Picked_Complete_Timestamp',
-      'Status_Check', 'User_Check', 'QC_Complete_Timestamp',
-      'Status_Truck', 'User_Truck', 'Hist_Truck_Time',
-      'Status_Load', 'User_Load', 'Hist_Load_Time', 'Time_Load_Start', 'Dock_Door', 'License_Plate',
-      'Created_At', 'Imported_At'
-    ];
     const logHeaders = ['timestamp', 'user', 'waveId', 'action'];
 
     const checkAndSetHeaders = async (sheetName, headers) => {
@@ -100,10 +102,11 @@ async function initSheetsHeaders() {
           valueInputOption: 'USER_ENTERED',
           requestBody: { values: [headers] },
         });
+        console.log(`✅ สร้างหัวตารางสำหรับ ${sheetName} สำเร็จ`);
       }
     };
 
-    await checkAndSetHeaders('Wave_Monitoring', waveHeaders);
+    await checkAndSetHeaders('Wave_Monitoring', WAVES_HEADERS);
     await checkAndSetHeaders('System_Logs', logHeaders);
     await checkAndSetHeaders('Dashboard_Summary', SUMMARY_HEADERS);
   } catch (error) {
