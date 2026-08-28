@@ -4997,6 +4997,7 @@
                   .replace(/^W-?/i, '')
                   .replace(/^Wave-?/i, '')
                   .replace(/^0+/, '') || '0');
+                  
                 if (tempData.hasOwnProperty(matchId)) {
                   const imported204 = tempData[matchId];
                   w.totalPieces = imported204.pieces;
@@ -5004,6 +5005,7 @@
                   w.wmsAllocatedQty = imported204.allocQ;
                   w.wmsTotalQty = imported204.totalQ;
                   w.wmsDisplayQty = imported204.pieces;
+                  
                   const wmsBooking = String(w.originalBookingNo || w.bookingNo || '-');
                   const wmsKeys = [w.rowKey, w.id].filter(Boolean);
                   wmsKeys.forEach((key) => {
@@ -5014,6 +5016,7 @@
                     localStorage.setItem(`wave_${key}_wms_booking`, wmsBooking);
                     localStorage.setItem(`wave_${key}_wms_ts`, String(Date.now()));
                   });
+                  
                   wmsRecordsToSync.push({
                     id: w.id,
                     originalBookingNo: w.originalBookingNo || w.bookingNo || '',
@@ -5025,17 +5028,19 @@
                     shipQ: imported204.shipQ,
                     pieces: imported204.pieces,
                   });
-                  
-                  // 🟢 ฟีเจอร์: ปิดงานอัตโนมัติถ้ายอดชิ้นเป็น 0 (ยกเว้น QC ที่ต้องให้คนกดเอง)
-                  if (imported204.pieces === 0) {
+
+                  // 🟢 เช็คแบบตรงไปตรงมา: ถ้ายอดชิ้นงานบนหน้าจอเป็น 0 ให้ปิดงานอัตโนมัติทันที
+                  if (this.getDisplayTotalPieces(w) === 0) {
                     let autoClosed = false;
                     const ts = Date.now();
                     const actualDateObj = new Date(ts);
                     const actualTime = actualDateObj.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', hour12: false });
                     
-                    // ปิดสเตป 1-3 ให้เป็น done อัตโนมัติ (จ่ายงาน, พิมพ์LPN, หยิบ) *เอา 'check' ออก
+                    // ปิดสเตป 1-3 ให้เป็น done อัตโนมัติ ยกเว้น QC ('check') ที่คนต้องกดเอง
                     ['allocate', 'print', 'pick'].forEach(stepKey => {
                       const step = w.steps.find(s => s.key === stepKey);
+                      
+                      // ถ้ายังไม่เสร็จ (หรือถ้ากำลังค้างสถานะ กำลังทำ) ให้ระบบแสตมป์ทับเป็น 'เสร็จสิ้น' ทันที
                       if (step && step.status !== 'done') {
                         step.status = 'done';
                         step.actualDateObj = actualDateObj;
@@ -5052,8 +5057,7 @@
                     });
                     
                     if (autoClosed) {
-                      // แสตมป์ลงประวัติการทำงาน (Logs)
-                      this.addLog(w.id, 'AUTO-CLOSE', 'ปิดงานหยิบโดยระบบ (ยอดชิ้น 0) รอคนกด QC');
+                      this.addLog(w.id, 'AUTO-CLOSE', 'ปิดงานหยิบโดยระบบ (ยอดชิ้น 0)');
                     }
                   }
 
