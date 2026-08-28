@@ -190,8 +190,135 @@ app.get('/api/waves/live', async (req, res) => {
   }
 });
 
+// === API อัปเดตสถานะงานกลับลง Google Sheets แบบ Batch ===
 app.post('/api/waves/update-status', async (req, res) => {
-  res.json({ success: true }); // จำลองการเซฟผ่าน
+  try {
+    if (!isSheetsDbConfigured) return res.json({ success: true });
+
+    const payload = req.body;
+    if (!payload || payload.length === 0) return res.json({ success: true });
+
+    // 1. ดึงข้อมูลชีตทั้งหมดเพื่อหาตำแหน่งแถว และตำแหน่งคอลัมน์
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: DB_SPREADSHEET_ID,
+      range: 'Wave_Monitoring!A:ZZ',
+    });
+    
+    const rows = response.data.values;
+    if (!rows || rows.length === 0) return res.json({ success: true });
+    
+    const headers = rows[0];
+    const updateData = []; // เก็บชุดข้อมูลที่จะไปอัปเดตหลายๆ ช่องพร้อมกัน
+
+    // Helper: แปลงเลข Index ให้เป็นตัวอักษรคอลัมน์ (เช่น 0=A, 1=B, 26=AA)
+    const getColLetter = (colIndex) => {
+      let temp, letter = '';
+      while (colIndex >= 0) {
+        temp = colIndex % 26;
+        letter = String.fromCharCode(temp + 65) + letter;
+        colIndex = (colIndex - temp) / 26 - 1;
+      }
+      return letter;
+    };
+
+    // 2. วนลูปข้อมูลการกดปุ่มที่ส่งมาจากหน้าเว็บ
+    payload.forEach((waveUpdate) => {
+      const targetWaveId = standardizeWaveId(waveUpdate.id);
+      // หาตำแหน่งแถว (บวก 1 เพราะ index เริ่มที่ 0 แต่ชีตเริ่มนับแถวที่ 1)
+      const rowIndex = rows.findIndex(row => standardizeWaveId(row[0]) === targetWaveId) + 1;
+      
+      if (rowIndex > 1) { // ถ้าเจอข้อมูล
+        (waveUpdate.steps || []).forEach(step => {
+          const capKey = step.key.charAt(0).toUpperCase() + step.key.slice(1);
+          
+          // จับคู่ชื่อคอลัมน์ใน Sheets
+          const statusColName = `Status_${capKey}`;
+          const userColName = `User_${capKey}`;
+          let timeColName = `Time_${capKey}`;
+          
+          if (step.key === 'pick') timeColName = 'Picked_Complete_Timestamp';
+          if (step.key === 'check') timeColName = 'QC_Complete_Timestamp';
+          if (step.key === 'truck') timeColName = 'Hist_Truck_Time';
+          if (step.key === 'load') timeColName = 'Hist_Load_Time';
+
+          const statusColIdx = headers.indexOf(statusColName);
+          const userColIdx = headers.indexOf(userColName);
+          const timeColIdx = headers.indexOf(timeColName);
+
+          // เตรียมข้อมูลอัปเดตสถานะ (pending, doing, done)
+          if (statusColIdx > -1) {
+            updateData.push({
+              range: `Wave_Monitoring!${getColLetter(statusColIdx)}${rowIndex}`,
+              values: [[step.status === 'reverted' ? 'pending' : step.status]]
+            });
+          }
+          
+          // เตรียมข้อมูลอัปเดตชื่อผู้กด
+          if (userColIdx > -1) {
+            const userVal = (step.status === 'pending' || step.status === 'reverted') ? '' : (step.actionUser === '-' ? '' : step.actionUser);
+            updateData.push({
+              range: `Wave_Monitoring!${getColLetter(userColIdx)}${rowIndex}`,
+              values: [[userVal]]
+            });
+          }
+          
+          // เตรียมข้อมูลอัปเดตเวลา
+          if (timeColIdx > -1) {
+            let timeVal = '';
+            if (step.status !== 'pending' && step.status !== 'reverted' && step.actualTimestamp && step.actualTimestamp !== '-') {
+              const d = new Date(Number(step.actualTimestamp));
+              timeVal = d.toLocaleString('en-CA', { hour12: false, timeZone: 'Asia/Bangkok' }).replace(',', '');
+            }
+            updateData.push({
+              range: `Wave_Monitoring!${getColLetter(timeColIdx)}${rowIndex}`,
+              values: [[timeVal]]
+            });
+          }
+
+          // จัดการพิเศษสำหรับประตูโหลดและป้ายทะเบียน
+          if (step.key === 'load') {
+            const dockColIdx = headers.indexOf('Dock_Door');
+            const loadStartColIdx = headers.indexOf('Time_Load_Start');
+            const licenseColIdx = headers.indexOf('License_Plate');
+
+            if (step.status === 'pending' || step.status === 'reverted') {
+              if (dockColIdx > -1) updateData.push({ range: `Wave_Monitoring!${getColLetter(dockColIdx)}${rowIndex}`, values: [['']] });
+              if (loadStartColIdx > -1) updateData.push({ range: `Wave_Monitoring!${getColLetter(loadStartColIdx)}${rowIndex}`, values: [['']] });
+            } else {
+              if (dockColIdx > -1 && step.dockInfo && step.dockInfo !== '-') {
+                updateData.push({ range: `Wave_Monitoring!${getColLetter(dockColIdx)}${rowIndex}`, values: [[step.dockInfo]] });
+              }
+              if (loadStartColIdx > -1 && step.doingDateObj && step.doingDateObj !== '-') {
+                const dStart = new Date(Number(step.doingDateObj));
+                const startVal = dStart.toLocaleString('en-CA', { hour12: false, timeZone: 'Asia/Bangkok' }).replace(',', '');
+                updateData.push({ range: `Wave_Monitoring!${getColLetter(loadStartColIdx)}${rowIndex}`, values: [[startVal]] });
+              }
+            }
+            if (licenseColIdx > -1 && waveUpdate.licensePlate) {
+              updateData.push({ range: `Wave_Monitoring!${getColLetter(licenseColIdx)}${rowIndex}`, values: [[waveUpdate.licensePlate]] });
+            }
+          }
+        });
+      }
+    });
+
+    // 3. ยิงคำสั่งอัปเดตลง Google Sheets ในครั้งเดียว (Batch Update ช่วยลดปัญหาระบบค้าง)
+    if (updateData.length > 0) {
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: DB_SPREADSHEET_ID,
+        requestBody: {
+          valueInputOption: 'USER_ENTERED',
+          data: updateData,
+        },
+      });
+      console.log(`✅ อัปเดตข้อมูลสำเร็จ: ${updateData.length} เซลล์`);
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('❌ อัปเดตสถานะขัดข้อง:', err.message);
+    res.status(500).json({ success: false, message: err.toString() });
+  }
 });
 
 // === ตัวแปรเก็บ Cache รายชื่อพนักงาน (อัปเดตทุก 1 ชม. ลดการโหลดช้า) ===
