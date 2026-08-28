@@ -106,26 +106,22 @@ async function updateDashboardSummary(dbWaves) {
         const timeStr = (w.Planned_Load_Time || '00:00').trim();
         // จัดฟอร์แมตให้เป็น HH:mm:ss
         const formattedTime = timeStr.length === 5 ? timeStr + ':00' : timeStr;
-        // ผูกวันที่และเวลารวมกันเป็น YYYY-MM-DDTHH:mm:ss+07:00
+        // 🟢 ผูกวันที่และเวลารวมกันเป็น YYYY-MM-DDTHH:mm:ss+07:00
         const d = new Date(`${w.Planned_Load_Date}T${formattedTime}+07:00`);
         if (!isNaN(d.getTime())) targetMs = d.getTime();
       }
 
-      // ฟังก์ชันเช็คว่า On-Time หรือ Late โดยเทียบวัน+เวลาเต็ม
+      // 🟢 ฟังก์ชันเช็คว่า On-Time หรือ Late โดยเทียบวัน+เวลาเต็ม
       const checkSLA = (actualTimeStr, minusMins) => {
         if (!actualTimeStr || actualTimeStr === '-' || actualTimeStr === '') return 'Pending';
         
-        // ปรับฟอร์แมตเวลาจริงจากชีต ให้แปลงเป็น Date object ได้สมบูรณ์
-        let cleanTimeStr = actualTimeStr.trim().replace(' ', 'T');
-        if (cleanTimeStr.length === 19) {
-            cleanTimeStr += '+07:00'; // ถ้ารูปแบบคือ YYYY-MM-DDTHH:mm:ss ให้บังคับโซนไทย
-        }
-
-        const actualDate = new Date(cleanTimeStr);
+        // แปลงเวลาให้เป็น Date object
+        const actualDate = new Date(actualTimeStr);
         if (isNaN(actualDate.getTime())) return 'Pending';
         if (!targetMs) return 'No_Plan'; // ไม่มีเวลาแผนโหลด
         
-        const slaLimitTime = targetMs - (minusMins * 60000); // หักลบ SLA เป็นมิลลิวินาที
+        // หักเวลาล่วงหน้าจากเป้าหมายเป็นมิลลิวินาที
+        const slaLimitTime = targetMs - (minusMins * 60000); 
         return actualDate.getTime() <= slaLimitTime ? 'On-Time' : 'Late';
       };
 
@@ -143,7 +139,6 @@ async function updateDashboardSummary(dbWaves) {
 
     const values = [SUMMARY_HEADERS, ...summaryData];
 
-    // เคลียร์ข้อมูลเก่าก่อนทับใหม่ทั้งหมดเพื่อป้องกันความซ้ำซ้อน
     await sheets.spreadsheets.values.clear({
       spreadsheetId: DB_SPREADSHEET_ID,
       range: `Dashboard_Summary!A1:ZZ`,
@@ -155,7 +150,7 @@ async function updateDashboardSummary(dbWaves) {
       valueInputOption: 'USER_ENTERED',
       requestBody: { values },
     });
-    console.log('✅ อัปเดต Dashboard_Summary (On-Time) วัน+เวลา สำเร็จ');
+    console.log('✅ อัปเดต Dashboard_Summary (On-Time) วัดจากวันที่+เวลา สำเร็จ');
   } catch (err) {
     console.error('❌ อัปเดต Dashboard_Summary ขัดข้อง:', err.message);
   }
@@ -165,7 +160,6 @@ async function updateDashboardSummary(dbWaves) {
 // 🚀 API Endpoints หลัก
 // ==========================================
 
-// 1. API ดึงประวัติ System Logs
 app.get('/api/logs', async (req, res) => {
   try {
     if (!isSheetsDbConfigured) return res.json([]);
@@ -182,7 +176,7 @@ app.get('/api/logs', async (req, res) => {
       waveId: row[2] || '',
       action: row[3] || ''
     }));
-    logs = logs.reverse().slice(0, 300); // เอาล่าสุดขึ้นก่อน 300 รายการ
+    logs = logs.reverse().slice(0, 300);
     res.json(logs);
   } catch (err) {
     console.error('❌ ดึง Logs ขัดข้อง:', err.message);
@@ -190,7 +184,6 @@ app.get('/api/logs', async (req, res) => {
   }
 });
 
-// 2. API บันทึก System Logs
 app.post('/api/logs/save', async (req, res) => {
   try {
     if (!isSheetsDbConfigured) return res.json({ success: true });
@@ -214,7 +207,6 @@ app.post('/api/logs/save', async (req, res) => {
   }
 });
 
-// === Helper ดึงข้อมูลจาก Sheets ===
 function parseNumericQty(value) {
   if (value === null || value === undefined) return 0;
   const cleaned = String(value).trim().replace(/,/g, '').replace(/\s/g, '');
@@ -247,11 +239,21 @@ async function fetchWaveDataFromSheets() {
   }
 }
 
-// 3. API โหลดข้อมูล Wave ขึ้นหน้าจอ Dashboard
+// 🟢 ระบบ Cache สำหรับ /api/waves/live เพื่อรองรับการใช้งานพร้อมกันหลายคน
+let waveDataCache = null;
+let waveDataLastFetch = 0;
+const CACHE_TTL = 10000; // 10 วินาที
+
 app.get('/api/waves/live', async (req, res) => {
   try {
     if (!isSheetsDbConfigured) return res.json([]);
     
+    const now = Date.now();
+    // 🟢 ถ้าแคชยังไม่หมดอายุ (10 วิ) ให้ใช้ข้อมูลเดิม ลดภาระ Google Sheets ป้องกันจอกระตุก
+    if (waveDataCache && (now - waveDataLastFetch < CACHE_TTL)) {
+      return res.json(waveDataCache);
+    }
+
     let resultData = await fetchWaveDataFromSheets();
 
     resultData = resultData.map((row) => {
@@ -266,14 +268,19 @@ app.get('/api/waves/live', async (req, res) => {
       return cleanRow;
     });
 
+    // อัปเดต Cache
+    waveDataCache = resultData;
+    waveDataLastFetch = now;
+
     res.json(resultData);
   } catch (err) {
     console.error('❌ ข้อผิดพลาดใน /api/waves/live:', err);
+    // ถ้าดึงข้อมูลผิดพลาด แต่มี Cache เก่าอยู่ ให้ส่งข้อมูลเก่าไปก่อน
+    if (waveDataCache) return res.json(waveDataCache);
     res.status(500).json([]);
   }
 });
 
-// === API อัปเดตสถานะงานกลับลง Google Sheets แบบ Batch ===
 app.post('/api/waves/update-status', async (req, res) => {
   try {
     if (!isSheetsDbConfigured) return res.json({ success: true });
@@ -291,7 +298,6 @@ app.post('/api/waves/update-status', async (req, res) => {
     
     const headers = rows[0];
     const updateData = []; 
-    // 🟢 ดึงตำแหน่งคอลัมน์ Booking มาเตรียมไว้ (เผื่อ 1 Wave มีหลาย Booking)
     const bookingColIdx = headers.indexOf('Vehicle_Booking_No');
 
     const getColLetter = (colIndex) => {
@@ -308,16 +314,13 @@ app.post('/api/waves/update-status', async (req, res) => {
       const targetWaveId = standardizeWaveId(waveUpdate.id);
       const targetBooking = (waveUpdate.originalBookingNo || '').trim().toLowerCase();
       
-      // 🟢 วนลูปหา "ทุกแถว" ใน Sheets
       rows.forEach((row, index) => {
         if (!row || !row[0]) return;
         
         const currentWaveId = standardizeWaveId(row[0]);
         
-        // ถ้าเลข Wave ตรงกัน ให้ประมวลผลบรรทัดนี้
         if (currentWaveId === targetWaveId) {
           
-          // เช็ค Booking_No ร่วมด้วย ป้องกันกรณี 1 Wave มีหลาย Booking
           let isBookingMatch = true;
           if (targetBooking && targetBooking !== '-' && bookingColIdx > -1) {
             const rowBooking = (row[bookingColIdx] || '').trim().toLowerCase();
@@ -327,9 +330,9 @@ app.post('/api/waves/update-status', async (req, res) => {
           }
 
           if (isBookingMatch) {
-            const rowIndex = index + 1; // +1 เพราะ Google Sheets เริ่มนับแถวที่ 1
+            const rowIndex = index + 1; 
             
-            if (rowIndex > 1) { // ป้องกันการทับหัวตาราง
+            if (rowIndex > 1) { 
               (waveUpdate.steps || []).forEach(step => {
                 const capKey = step.key.charAt(0).toUpperCase() + step.key.slice(1);
                 
@@ -364,9 +367,8 @@ app.post('/api/waves/update-status', async (req, res) => {
                 if (timeColIdx > -1) {
                   let timeVal = '';
                   if (step.status !== 'pending' && step.status !== 'reverted' && step.actualTimestamp && step.actualTimestamp !== '-') {
-                    // ประทับวันที่+เวลาจริง ลงชีต 
                     const d = new Date(Number(step.actualTimestamp));
-                    timeVal = d.toLocaleString('en-CA', { hour12: false, timeZone: 'Asia/Bangkok' }).replace(',', '');
+                    timeVal = d.toISOString();
                   }
                   updateData.push({
                     range: `Wave_Monitoring!${getColLetter(timeColIdx)}${rowIndex}`,
@@ -388,8 +390,7 @@ app.post('/api/waves/update-status', async (req, res) => {
                     }
                     if (loadStartColIdx > -1 && step.doingDateObj && step.doingDateObj !== '-') {
                       const dStart = new Date(Number(step.doingDateObj));
-                      const startVal = dStart.toLocaleString('en-CA', { hour12: false, timeZone: 'Asia/Bangkok' }).replace(',', '');
-                      updateData.push({ range: `Wave_Monitoring!${getColLetter(loadStartColIdx)}${rowIndex}`, values: [[startVal]] });
+                      updateData.push({ range: `Wave_Monitoring!${getColLetter(loadStartColIdx)}${rowIndex}`, values: [[dStart.toISOString()]] });
                     }
                   }
                   if (licenseColIdx > -1 && waveUpdate.licensePlate) {
@@ -404,7 +405,6 @@ app.post('/api/waves/update-status', async (req, res) => {
     });
 
     if (updateData.length > 0) {
-      // อัปเดตเซลล์ทั้งหมดที่ค้นเจอในคำสั่งเดียว
       await sheets.spreadsheets.values.batchUpdate({
         spreadsheetId: DB_SPREADSHEET_ID,
         requestBody: {
@@ -414,9 +414,10 @@ app.post('/api/waves/update-status', async (req, res) => {
       });
       console.log(`✅ อัปเดตข้อมูลสำเร็จ: ${updateData.length} เซลล์`);
 
-      // 📊 ซิงค์ Dashboard_Summary เมื่อสถานะมีการอัปเดต
+      // 📊 ซิงค์ Dashboard_Summary และล้างแคชให้ 10 คนเห็นข้อมูลพร้อมกัน
       const updatedWaves = await fetchWaveDataFromSheets();
       await updateDashboardSummary(updatedWaves);
+      waveDataCache = null; // 🟢 ล้าง Cache เมื่อมีการแก้ไขสเตตัส
     }
 
     res.json({ success: true });
@@ -426,7 +427,6 @@ app.post('/api/waves/update-status', async (req, res) => {
   }
 });
 
-// === ตัวแปรเก็บ Cache รายชื่อพนักงาน (อัปเดตทุก 1 ชม. ลดการโหลดช้า) ===
 let employeeCache = null;
 let lastCacheTime = 0;
 const CACHE_DURATION = 60 * 60 * 1000;
@@ -481,11 +481,6 @@ app.post('/api/verify-employee', async (req, res) => {
 app.get('/api/version', (req, res) => res.json({ version: '1.3.0' }));
 app.get('/api/settings', (req, res) => res.json({}));
 
-// ==========================================
-// 🚀 API สำหรับ Import แผนงานและ 204 (รับเป็น JSON จาก Frontend)
-// ==========================================
-
-// API นำเข้าแผนงาน Excel (รับ JSON จาก Frontend แล้วลง Google Sheets)
 app.post('/api/waves/bulk-insert', async (req, res) => {
   try {
     const sheetData = req.body; 
@@ -515,9 +510,10 @@ app.post('/api/waves/bulk-insert', async (req, res) => {
         requestBody: { values: rowsToAdd },
       });
 
-      // 📊 ซิงค์ Dashboard_Summary เมื่อมีงานใหม่เข้ามา
+      // 📊 ซิงค์ Dashboard_Summary และล้างแคช
       const updatedWaves = await fetchWaveDataFromSheets();
       await updateDashboardSummary(updatedWaves);
+      waveDataCache = null; // 🟢 ล้าง Cache เมื่อแผนงานเปลี่ยน
     }
 
     return res.json({ 
@@ -531,7 +527,6 @@ app.post('/api/waves/bulk-insert', async (req, res) => {
   }
 });
 
-// === 2. API สำหรับ Import 204 ===
 app.post('/api/wms-204/bulk', async (req, res) => {
   try {
     if (!isSheetsDbConfigured) return res.json({ success: true });
@@ -601,6 +596,7 @@ app.post('/api/wms-204/bulk', async (req, res) => {
         },
       });
       console.log(`✅ อัปเดตข้อมูล 204 สำเร็จ: ${updateData.length} เซลล์`);
+      waveDataCache = null; // 🟢 ล้าง Cache เมื่ออัปเดต 204
     }
 
     return res.json({ success: true, message: 'บันทึกข้อมูล 204 ลง Google Sheets สำเร็จ' });
@@ -624,6 +620,8 @@ app.get('/api/last-204-time', (req, res) => {
 app.post('/api/sync-tms-sheet', async (req, res) => {
   res.json({ success: true, message: 'ซิงค์ข้อมูลสำเร็จ', updatedCount: 0 });
 });
+
+// ==========================================
 
 app.get(/.*/, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
