@@ -1692,6 +1692,16 @@
           </div>
         </div>
       </div>
+      <!-- 🟢 กราฟปริมาณงานจ่ายลงสายพาน (Hourly Allocation) -->
+        <div class="rounded-2xl p-5 relative flex flex-col bg-white shadow-sm border border-slate-200/60 w-full h-[340px] mt-4">
+          <h3 class="text-[12px] font-bold text-slate-800 mb-2 uppercase tracking-widest flex items-center gap-2 flex-shrink-0">
+            <i class="fas fa-boxes text-indigo-500 bg-indigo-50 p-1.5 rounded-lg"></i>
+            ปริมาณงานจ่ายลงสายพานรายชั่วโมง (Hourly Allocated Volume)
+          </h3>
+          <div class="flex-1 w-full relative min-h-0 mt-2">
+            <canvas id="hourlyAllocChart"></canvas>
+          </div>
+        </div>
       <div class="flex flex-col gap-4 mt-4">
         <h2 class="text-sm font-bold text-slate-800 border-b border-slate-200 pb-2 uppercase tracking-wide flex items-center gap-2">
           <i class="fas fa-truck text-emerald-600 bg-emerald-50 p-1.5 rounded-lg"></i>
@@ -4434,6 +4444,15 @@
           for (let i = 1; i <= 13; i++) {
             dockUsage['Dock ' + String(i).padStart(2, '0')] = Array(24).fill(0);
           }
+          let tpDailyMap = {};
+          let dockUsage = {};
+          for (let i = 1; i <= 13; i++) {
+            dockUsage['Dock ' + String(i).padStart(2, '0')] = Array(24).fill(0);
+          }
+          // 🟢 เตรียมโครงสร้างเก็บกล่องรายชั่วโมง
+          let hourlyAllocMap = Array(24).fill(0).map((_, i) => ({ 
+            hour: String(i).padStart(2, '0')+':00', dm02: 0, dp02: 0, other: 0 
+          }));
           baseData.forEach((w) => {
             s.total++;
             const pDone = w.steps[2].status === 'done';
@@ -4545,6 +4564,18 @@
                 dockUsage[d][h]++;
               }
             }
+            
+            // 🟢 คำนวณยอด Allocated (จ่ายงาน) รายชั่วโมง
+            const allocStep = w.steps[0];
+            if (allocStep && allocStep.status === 'done' && allocStep.actualDateObj) {
+              let hr = allocStep.actualDateObj.getHours();
+              let qty = w.totalPieces || 0;
+              let owner = w.ownerGroup || 'Other';
+              
+              if (owner === 'DM02') hourlyAllocMap[hr].dm02 += qty;
+              else if (owner === 'DP02') hourlyAllocMap[hr].dp02 += qty;
+              else hourlyAllocMap[hr].other += qty;
+            }
             const wDate = new Date(w.targetDateTime);
             if (!isNaN(wDate.getTime())) {
               const startOfYear = new Date(wDate.getFullYear(), 0, 1);
@@ -4628,6 +4659,9 @@
               }))
               .slice(-10);
           };
+          // 🟢 ส่งข้อมูลไปให้กราฟ
+          this.execAnalytics.hourlyAlloc = hourlyAllocMap;
+          
           this.execAnalytics.tpDaily = Object.values(tpDailyMap)
             .map((d) => ({
               date: d.date,
@@ -6285,37 +6319,28 @@
         },
 
         renderExecCharts() {
-          // 1. กราฟแนวโน้มประสิทธิภาพ DC
-          const dcTrendCtx = document.getElementById('execDcChart');
-          if (dcTrendCtx) {
-            if (this.execDcChartInstance) this.execDcChartInstance.destroy();
-            this.execDcChartInstance = new Chart(dcTrendCtx, {
-              type: 'line',
+          // 🟢 วาดกราฟ Hourly Allocation (ปริมาณงานจ่ายลงสายพาน)
+          const hourlyCtx = document.getElementById('hourlyAllocChart');
+          if (hourlyCtx) {
+            if (this.hourlyAllocChartInstance) this.hourlyAllocChartInstance.destroy();
+            this.hourlyAllocChartInstance = new Chart(hourlyCtx, {
+              type: 'bar',
               data: {
-                labels: this.execAnalytics.weekly.map((w) => w.key),
+                labels: this.execAnalytics.hourlyAlloc.map(h => h.hour),
                 datasets: [
-                  { label: 'Pick On-Time', data: this.execAnalytics.weekly.map((w) => (w.pickOnTime === '-' ? null : w.pickOnTime)), borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.3, fill: true },
-                  { label: 'QC On-Time', data: this.execAnalytics.weekly.map((w) => (w.qcOnTime === '-' ? null : w.qcOnTime)), borderColor: '#0aa66c', backgroundColor: 'rgba(10, 166, 108, 0.1)', tension: 0.3, fill: true },
-                ],
+                  { label: 'DM02', data: this.execAnalytics.hourlyAlloc.map(h => h.dm02), backgroundColor: '#3b82f6', borderRadius: 4, stack: 'Stack 0' },
+                  { label: 'DP02', data: this.execAnalytics.hourlyAlloc.map(h => h.dp02), backgroundColor: '#f59e0b', borderRadius: 4, stack: 'Stack 0' },
+                  { label: 'Other', data: this.execAnalytics.hourlyAlloc.map(h => h.other), backgroundColor: '#94a3b8', borderRadius: 4, stack: 'Stack 0' }
+                ]
               },
-              options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 100 } } },
-            });
-          }
-
-          // 2. กราฟแนวโน้มประสิทธิภาพการขนส่ง
-          const tpTrendCtx = document.getElementById('execTpChart');
-          if (tpTrendCtx) {
-            if (this.execTpChartInstance) this.execTpChartInstance.destroy();
-            this.execTpChartInstance = new Chart(tpTrendCtx, {
-              type: 'line',
-              data: {
-                labels: this.execAnalytics.weekly.map((w) => w.key),
-                datasets: [
-                  { label: 'Truck On-Time', data: this.execAnalytics.weekly.map((w) => (w.truckOnTime === '-' ? null : w.truckOnTime)), borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.3, fill: true },
-                  { label: 'Load On-Time', data: this.execAnalytics.weekly.map((w) => (w.loadOnTime === '-' ? null : w.loadOnTime)), borderColor: '#0aa66c', backgroundColor: 'rgba(10, 166, 108, 0.1)', tension: 0.3, fill: true },
-                ],
-              },
-              options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 100 } } },
+              options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: { 
+                  x: { stacked: true, grid: { display: false }, ticks: { font: { family: 'Kanit', size: 10 } } },
+                  y: { stacked: true, ticks: { font: { family: 'Kanit', size: 10 } } }
+                },
+                plugins: { legend: { position: 'top', labels: { font: { family: 'Kanit', size: 11, usePointStyle: true } } } }
+              }
             });
           }
         },
