@@ -4554,7 +4554,7 @@
             dockUsage['Dock ' + String(i).padStart(2, '0')] = Array(24).fill(0);
           }
           // 🟢 เตรียมโครงสร้างเก็บกล่องรายชั่วโมง
-          let hourlyAllocMap = Array(24).fill(0).map((_, i) => ({ 
+          let hourlyAllocMap = Array(24).fill(0).map((_, i) => ({
             hour: String(i).padStart(2, '0')+':00', dm02: 0, dp02: 0, other: 0 
           }));
           baseData.forEach((w) => {
