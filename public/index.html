@@ -1692,17 +1692,98 @@
           </div>
         </div>
       </div>
-      <!-- 🟢 กราฟปริมาณงานจ่ายลงสายพาน (Hourly Allocation) พร้อมตาราง Heatmap -->
-      <div class="rounded-2xl p-5 relative flex flex-col bg-white shadow-sm border border-slate-200/60 w-full min-h-[460px] mt-4">
-        <h3 class="text-[12px] font-bold text-slate-800 mb-2 uppercase tracking-widest flex items-center gap-2 flex-shrink-0">
-          <i class="fas fa-boxes text-indigo-500 bg-indigo-50 p-1.5 rounded-lg"></i>
-          ปริมาณงานจ่ายลงสายพานรายชั่วโมง (Hourly Allocated Volume)
-        </h3>
+      <!-- 🟢 กราฟปริมาณงานจ่ายลงสายพาน (Hourly Allocation) พร้อมตาราง Heatmap แบบกระชับ -->
+      <div class="rounded-2xl p-5 relative flex flex-col bg-white shadow-sm border border-slate-200/60 w-full mt-4">
         
-        <!-- ส่วนแสดงผลกราฟ -->
-        <div class="flex-1 w-full relative min-h-[250px] mt-2">
+        <!-- Header & Filters -->
+        <div class="flex flex-wrap items-center justify-between mb-4 gap-2 border-b border-slate-100 pb-3">
+          <h3 class="text-[12px] font-bold text-slate-800 uppercase tracking-widest flex items-center gap-2">
+            <i class="fas fa-boxes text-indigo-500 bg-indigo-50 p-1.5 rounded-lg"></i>
+            ปริมาณงานจ่ายลงสายพานรายชั่วโมง (Hourly Allocated Volume)
+          </h3>
+          <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2 h-8 shadow-sm">
+              <i class="fas fa-calendar-alt text-slate-400 text-[10px]"></i>
+              <input type="date" x-model="hourlyFilter.date" @change="updateHourlyChart()" class="text-[10px] font-bold text-slate-600 bg-transparent outline-none w-[110px]" />
+            </div>
+            <select x-model="hourlyFilter.owner" @change="updateHourlyChart()" class="bg-slate-50 border border-slate-200 rounded-lg px-2 h-8 text-[10px] font-bold outline-none text-slate-700 shadow-sm cursor-pointer">
+              <option value="all">ทุกทีม (All Owners)</option>
+              <option value="DM02">เฉพาะ DM02</option>
+              <option value="DP02">เฉพาะ DP02</option>
+              <option value="Other">เฉพาะ Other</option>
+            </select>
+          </div>
+        </div>
+        
+        <!-- Canvas กราฟ -->
+        <div class="w-full relative h-[240px]">
           <canvas id="hourlyAllocChart"></canvas>
         </div>
+        
+        <!-- ตารางข้อมูลด้านล่าง (ไม่มี Scrollbar โชว์ตัวเลขเรียง 24 ชม.) -->
+        <div class="mt-3 pt-3 w-full">
+          <table class="w-full text-center border-collapse table-fixed">
+            <thead class="border-b-2 border-slate-100">
+              <tr>
+                <th class="py-1 text-slate-500 uppercase w-12 text-[9px] font-bold text-left pl-2">ทีม</th>
+                <template x-for="h in execAnalytics.hourlyAlloc" :key="'th'+h.hour">
+                  <th class="py-1 text-slate-400 font-semibold text-[8px] text-center" x-text="h.hour.split(':')[0]"></th>
+                </template>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- แถว DM02 -->
+              <tr x-show="hourlyFilter.owner === 'all' || hourlyFilter.owner === 'DM02'" class="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                <td class="py-1 font-bold text-blue-500 text-[9px] text-left pl-2 border-r border-slate-100">DM02</td>
+                <template x-for="h in execAnalytics.hourlyAlloc" :key="'dm'+h.hour">
+                  <td class="p-[1px]">
+                    <div class="w-full py-0.5 text-[8px] font-medium rounded-[3px] transition-colors"
+                         :class="h.dm02 > (settings.maxLimits.DM02 || 0) ? 'bg-rose-500 text-white font-bold shadow-sm' : 'text-slate-500'"
+                         x-text="h.dm02 > 0 ? (h.dm02 >= 1000 ? (h.dm02/1000).toFixed(1)+'k' : h.dm02) : '-'"
+                         :title="h.dm02.toLocaleString() + ' ชิ้น'"></div>
+                  </td>
+                </template>
+              </tr>
+              <!-- แถว DP02 -->
+              <tr x-show="hourlyFilter.owner === 'all' || hourlyFilter.owner === 'DP02'" class="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                <td class="py-1 font-bold text-amber-500 text-[9px] text-left pl-2 border-r border-slate-100">DP02</td>
+                <template x-for="h in execAnalytics.hourlyAlloc" :key="'dp'+h.hour">
+                  <td class="p-[1px]">
+                    <div class="w-full py-0.5 text-[8px] font-medium rounded-[3px] transition-colors"
+                         :class="h.dp02 > (settings.maxLimits.DP02 || 0) ? 'bg-rose-500 text-white font-bold shadow-sm' : 'text-slate-500'"
+                         x-text="h.dp02 > 0 ? (h.dp02 >= 1000 ? (h.dp02/1000).toFixed(1)+'k' : h.dp02) : '-'"
+                         :title="h.dp02.toLocaleString() + ' ชิ้น'"></div>
+                  </td>
+                </template>
+              </tr>
+              <!-- แถว Other -->
+              <tr x-show="hourlyFilter.owner === 'all' || hourlyFilter.owner === 'Other'" class="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                <td class="py-1 font-bold text-slate-400 text-[9px] text-left pl-2 border-r border-slate-100">Other</td>
+                <template x-for="h in execAnalytics.hourlyAlloc" :key="'oth'+h.hour">
+                  <td class="p-[1px]">
+                    <div class="w-full py-0.5 text-[8px] font-medium rounded-[3px] transition-colors"
+                         :class="h.other > (settings.maxLimits.Other || 0) ? 'bg-rose-500 text-white font-bold shadow-sm' : 'text-slate-400'"
+                         x-text="h.other > 0 ? (h.other >= 1000 ? (h.other/1000).toFixed(1)+'k' : h.other) : '-'"
+                         :title="h.other.toLocaleString() + ' ชิ้น'"></div>
+                  </td>
+                </template>
+              </tr>
+              <!-- แถวรวมทั้งหมด -->
+              <tr x-show="hourlyFilter.owner === 'all'" class="bg-slate-50/50">
+                <td class="py-1 font-bold text-slate-700 text-[9px] text-left pl-2 border-r border-slate-100">Total</td>
+                <template x-for="h in execAnalytics.hourlyAlloc" :key="'tot'+h.hour">
+                  <td class="p-[1px]">
+                    <div class="w-full py-0.5 text-[8px] transition-colors"
+                         :class="h.total > ((settings.maxLimits.DM02||0) + (settings.maxLimits.DP02||0) + (settings.maxLimits.Other||0)) ? 'bg-rose-500 text-white font-bold shadow-sm rounded-[3px]' : 'text-slate-600 font-bold'"
+                         x-text="h.total > 0 ? (h.total >= 1000 ? (h.total/1000).toFixed(1)+'k' : h.total) : '-'"
+                         :title="h.total.toLocaleString() + ' ชิ้น'"></div>
+                  </td>
+                </template>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
         
         <!-- 🟢 เพิ่มตาราง Heatmap ด้านล่างกราฟ -->
         <div class="mt-4 overflow-x-auto custom-scrollbar border-t border-slate-100 pt-4">
@@ -3264,6 +3345,10 @@
         transporterPerformance: [],
         vehiclePerformance: [],
         heatmapData: { hours: [], data: [] },
+        hourlyFilter: {
+          date: new Date().toLocaleDateString('en-CA', {timeZone: 'Asia/Bangkok'}), // ค่าเริ่มต้นคือวันนี้
+          owner: 'all'
+        },
         // 🔵 [เพิ่มใหม่] state ตัวกรองช่วงเวลาของ Executive Dashboard
         dashPeriod: '3', // '3' | '6' | '12' | 'all' (ค่าเริ่มต้น = 3 เดือน)
         dashStart: '',   // วันเริ่ม (จากปฏิทิน) — ถ้ามีค่าจะ override ปุ่ม
@@ -6404,30 +6489,92 @@
             });
           }
 
-          // 3. กราฟปริมาณงานจ่ายลงสายพาน (Hourly Allocation)
-          const hourlyCtx = document.getElementById('hourlyAllocChart');
-          if (hourlyCtx) {
-            if (this.hourlyAllocChartInstance) this.hourlyAllocChartInstance.destroy();
-            this.hourlyAllocChartInstance = new Chart(hourlyCtx, {
-              type: 'bar',
-              data: {
-                labels: this.execAnalytics.hourlyAlloc ? this.execAnalytics.hourlyAlloc.map(h => h.hour) : [],
-                datasets: [
-                  { label: 'DM02', data: this.execAnalytics.hourlyAlloc ? this.execAnalytics.hourlyAlloc.map(h => h.dm02) : [], backgroundColor: '#3b82f6', borderRadius: 4, stack: 'Stack 0' },
-                  { label: 'DP02', data: this.execAnalytics.hourlyAlloc ? this.execAnalytics.hourlyAlloc.map(h => h.dp02) : [], backgroundColor: '#f59e0b', borderRadius: 4, stack: 'Stack 0' },
-                  { label: 'Other', data: this.execAnalytics.hourlyAlloc ? this.execAnalytics.hourlyAlloc.map(h => h.other) : [], backgroundColor: '#94a3b8', borderRadius: 4, stack: 'Stack 0' }
-                ]
-              },
-              options: {
-                responsive: true, maintainAspectRatio: false,
-                scales: { 
-                  x: { stacked: true, grid: { display: false }, ticks: { font: { family: 'Kanit', size: 10 } } },
-                  y: { stacked: true, ticks: { font: { family: 'Kanit', size: 10 } } }
-                },
-                plugins: { legend: { position: 'top', labels: { font: { family: 'Kanit', size: 11, usePointStyle: true } } } }
+          // 3. เริ่มคำนวณและวาดกราฟปริมาณงานรายชั่วโมง
+          this.updateHourlyChart();
+        },
+
+        updateHourlyChart() {
+          let hourlyMap = Array(24).fill(0).map((_, i) => ({
+            hour: String(i).padStart(2, '0') + ':00', dm02: 0, dp02: 0, other: 0, total: 0
+          }));
+          
+          let targetDate = this.hourlyFilter.date;
+          let targetOwner = this.hourlyFilter.owner;
+          
+          this.waves.forEach(w => {
+            const allocStep = w.steps[0];
+            if (allocStep && allocStep.status === 'done' && allocStep.actualDateObj) {
+              // กรองเฉพาะวันและทีมที่เลือก
+              let actDate = allocStep.actualDateObj.toLocaleDateString('en-CA', {timeZone: 'Asia/Bangkok'});
+              if (actDate === targetDate) {
+                let hr = allocStep.actualDateObj.getHours();
+                let qty = w.totalPieces || 0;
+                let owner = w.ownerGroup || 'Other';
+                
+                if (owner === 'DM02') hourlyMap[hr].dm02 += qty;
+                else if (owner === 'DP02') hourlyMap[hr].dp02 += qty;
+                else hourlyMap[hr].other += qty;
+                
+                hourlyMap[hr].total += qty;
               }
-            });
-          }
+            }
+          });
+          
+          this.execAnalytics.hourlyAlloc = hourlyMap;
+          this.renderHourlyChart();
+        },
+        
+        renderHourlyChart() {
+          const hourlyCtx = document.getElementById('hourlyAllocChart');
+          if (!hourlyCtx) return;
+          if (this.hourlyAllocChartInstance) this.hourlyAllocChartInstance.destroy();
+          
+          // คำนวณเส้น Target Line
+          let targetVal = 0;
+          if (this.hourlyFilter.owner === 'DM02') targetVal = this.settings.maxLimits.DM02 || 0;
+          else if (this.hourlyFilter.owner === 'DP02') targetVal = this.settings.maxLimits.DP02 || 0;
+          else targetVal = (this.settings.maxLimits.DM02 || 0) + (this.settings.maxLimits.DP02 || 0) + (this.settings.maxLimits.Other || 0);
+
+          let showDM02 = this.hourlyFilter.owner === 'all' || this.hourlyFilter.owner === 'DM02';
+          let showDP02 = this.hourlyFilter.owner === 'all' || this.hourlyFilter.owner === 'DP02';
+          let showOther = this.hourlyFilter.owner === 'all' || this.hourlyFilter.owner === 'Other';
+
+          let datasets = [];
+          if (showDM02) datasets.push({ label: 'DM02', data: this.execAnalytics.hourlyAlloc.map(h => h.dm02), backgroundColor: '#3b82f6', borderRadius: 4, stack: 'Stack 0', order: 1 });
+          if (showDP02) datasets.push({ label: 'DP02', data: this.execAnalytics.hourlyAlloc.map(h => h.dp02), backgroundColor: '#f59e0b', borderRadius: 4, stack: 'Stack 0', order: 1 });
+          if (showOther) datasets.push({ label: 'Other', data: this.execAnalytics.hourlyAlloc.map(h => h.other), backgroundColor: '#94a3b8', borderRadius: 4, stack: 'Stack 0', order: 1 });
+
+          // เพิ่มเส้นประ Target สีแดง
+          datasets.push({
+            type: 'line',
+            label: 'Max Limit (Target)',
+            data: Array(24).fill(targetVal),
+            borderColor: '#ef4444',
+            borderWidth: 2,
+            borderDash: [5, 5],
+            fill: false,
+            pointRadius: 0,
+            order: 0
+          });
+
+          this.hourlyAllocChartInstance = new Chart(hourlyCtx, {
+            type: 'bar',
+            data: {
+              labels: this.execAnalytics.hourlyAlloc.map(h => h.hour),
+              datasets: datasets
+            },
+            options: {
+              responsive: true, maintainAspectRatio: false,
+              scales: { 
+                x: { stacked: true, grid: { display: false }, ticks: { font: { family: 'Kanit', size: 10 } } },
+                y: { stacked: true, ticks: { font: { family: 'Kanit', size: 10 } } }
+              },
+              plugins: { 
+                legend: { position: 'top', labels: { font: { family: 'Kanit', size: 11, usePointStyle: true } } },
+                tooltip: { mode: 'index', intersect: false }
+              }
+            }
+          });
         },
         fetchLast204Time() {
           fetch('/api/last-204-time')
