@@ -1696,60 +1696,79 @@
           2. สรุปประสิทธิภาพการขนส่ง (Transporter Performance)
         </h2>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 flex-shrink-0 items-stretch">
-          <div
-            class="rounded-2xl p-5 lg:col-span-2 flex flex-col h-[340px] bg-white shadow-sm border border-slate-200/60">
-            <h3
-              class="text-[11px] font-bold text-slate-800 mb-4 uppercase tracking-widest flex items-center gap-2 flex-shrink-0">
-              <i class="fas fa-chart-bar text-emerald-500"></i>
-              กราฟประสิทธิภาพขนส่งรายบริษัท
-            </h3>
-            <div class="flex-1 w-full relative min-h-0">
-              <canvas id="transporterChart"></canvas>
+        <!-- 🟢 ส่วนที่แก้ไขใหม่: ตารางผลงานขนส่งแบบมี Progress Bar แนวนอนในตัว -->
+        <div class="grid grid-cols-1 gap-5 flex-shrink-0 items-stretch mt-1">
+          <div class="rounded-2xl p-0 relative flex flex-col bg-white shadow-sm border border-slate-200/60 overflow-hidden">
+            
+            <!-- Header ด้านบนตาราง -->
+            <div class="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <h3 class="text-[13px] font-bold text-slate-800 uppercase tracking-widest flex items-center gap-2 m-0">
+                <i class="fas fa-truck-fast text-emerald-500"></i>
+                CARRIER PERFORMANCE OVERVIEW
+              </h3>
+              <button @click="exportToExcel('transporterTable', 'Transporter_Performance')"
+                class="text-emerald-600 hover:bg-emerald-50 px-3 py-1.5 rounded-lg flex items-center justify-center transition-all text-[11px] font-bold uppercase tracking-wider border border-emerald-200 bg-white shadow-sm">
+                <i class="fas fa-file-excel mr-1.5"></i> Export
+              </button>
             </div>
-          </div>
-          <div class="rounded-2xl p-5 relative flex flex-col h-[340px] bg-white shadow-sm border border-slate-200/60">
-            <h3
-              class="text-[11px] font-bold text-slate-800 mb-4 uppercase tracking-widest flex items-center gap-2 flex-shrink-0">
-              <i class="fas fa-list text-emerald-500"></i> สรุปผลงานขนส่ง
-            </h3>
-            <button @click="exportToExcel('transporterTable', 'Transporter_Performance')"
-              class="absolute top-4 right-5 text-emerald-600 hover:bg-emerald-50 px-2 py-1.5 rounded-lg flex items-center justify-center transition-all text-[11px] font-bold uppercase tracking-wider">
-              <i class="fas fa-file-excel mr-1"></i>
-            </button>
-            <div class="flex-1 overflow-y-auto custom-scrollbar border border-slate-100 rounded-lg bg-white min-h-0">
-              <table id="transporterTable" class="w-full text-left border-collapse compact-table">
-                <thead class="sticky top-0 bg-slate-50 z-10 border-b border-slate-200 shadow-sm">
+            
+            <!-- ตารางข้อมูล -->
+            <div class="flex-1 overflow-x-auto custom-scrollbar bg-white">
+              <table id="transporterTable" class="w-full text-left border-collapse min-w-[800px]">
+                <thead class="bg-slate-100/80 text-slate-500 text-[11px] uppercase font-bold tracking-wider border-b border-slate-200">
                   <tr>
-                    <th class="p-2 text-slate-500 font-semibold uppercase text-[9px] tracking-wider">
-                      บริษัทขนส่ง
-                    </th>
-                    <th class="p-2 text-slate-500 font-semibold uppercase text-[9px] tracking-wider text-center w-12">
-                      คิว
-                    </th>
-                    <th class="p-2 text-slate-500 font-semibold uppercase text-[9px] tracking-wider text-center w-16">
-                      รถเข้า
-                    </th>
-                    <th class="p-2 text-slate-500 font-semibold uppercase text-[9px] tracking-wider text-center w-16">
-                      โหลด
-                    </th>
+                    <th class="p-4 pl-6 border-r border-slate-200/50">บริษัทขนส่ง (TRANSPORTER)</th>
+                    <th class="p-4 text-center w-24 border-r border-slate-200/50">คิว (ORDERS)</th>
+                    <th class="p-4 w-72 border-r border-slate-200/50">รถเข้า ON-TIME % (TRUCK)</th>
+                    <th class="p-4 w-72">โหลด ON-TIME % (LOAD)</th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-100">
+                <tbody class="divide-y divide-slate-100 text-slate-700 text-[13px]">
                   <template x-for="tp in transporterPerformance" :key="tp.name">
-                    <tr class="hover:bg-slate-50 transition-colors">
-                      <td class="p-2 font-medium text-slate-600 uppercase text-[10px] truncate max-w-[100px]"
-                        :title="tp.name" x-text="tp.name"></td>
-                      <td class="p-2 font-bold text-slate-800 text-center bg-slate-50/50 text-[10px]" x-text="tp.total">
+                    <tr class="hover:bg-blue-50/50 transition-colors group">
+                      
+                      <!-- ชื่อบริษัท -->
+                      <td class="p-4 pl-6 font-bold text-slate-800 whitespace-nowrap border-r border-slate-100 group-hover:border-blue-100" x-text="tp.name"></td>
+                      
+                      <!-- จำนวนคิว -->
+                      <td class="p-4 text-center font-bold text-slate-600 bg-slate-50/30 border-r border-slate-100 group-hover:bg-blue-50/50 group-hover:border-blue-100" x-text="tp.total"></td>
+                      
+                      <!-- 🔵 แถบสี รถเข้า On-Time (สีฟ้า / แดง) -->
+                      <td class="p-4 pr-6 border-r border-slate-100 group-hover:border-blue-100">
+                        <div class="flex items-center justify-between gap-4">
+                          <div class="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex-1 shadow-inner">
+                            <div class="h-full rounded-full transition-all duration-700 ease-out"
+                                 :class="tp.truckPercent === '-' ? 'bg-slate-300' : (tp.truckPercent >= 98 ? 'bg-gradient-to-r from-blue-400 to-blue-500 shadow-md' : 'bg-gradient-to-r from-rose-400 to-rose-600 shadow-md')"
+                                 :style="`width: ${tp.truckPercent === '-' ? 0 : tp.truckPercent}%`">
+                            </div>
+                          </div>
+                          <span class="font-bold w-12 text-right text-[14px]"
+                                :class="tp.truckPercent === '-' ? 'text-slate-400' : (tp.truckPercent >= 98 ? 'text-slate-700' : 'text-rose-600')"
+                                x-text="tp.truckPercent === '-' ? '-' : tp.truckPercent + '%'"></span>
+                        </div>
                       </td>
-                      <td class="p-2 font-bold text-center text-[10px]"
-                        :class="tp.truckPercent === '-' ? 'text-slate-400' : (tp.truckPercent >= 90 ? 'text-emerald-600' : 'text-rose-600')"
-                        x-text="tp.truckPercent === '-' ? '-' : tp.truckPercent + '%'"></td>
-                      <td class="p-2 font-bold text-center text-[10px]"
-                        :class="tp.loadPercent === '-' ? 'text-slate-400' : (tp.loadPercent >= 90 ? 'text-emerald-600' : 'text-rose-600')"
-                        x-text="tp.loadPercent === '-' ? '-' : tp.loadPercent + '%'"></td>
+                      
+                      <!-- 🟢 แถบสี โหลด On-Time (สีเขียว / แดง) -->
+                      <td class="p-4 pr-6">
+                        <div class="flex items-center justify-between gap-4">
+                          <div class="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex-1 shadow-inner">
+                            <div class="h-full rounded-full transition-all duration-700 ease-out"
+                                 :class="tp.loadPercent === '-' ? 'bg-slate-300' : (tp.loadPercent >= 98 ? 'bg-gradient-to-r from-emerald-400 to-emerald-500 shadow-md' : 'bg-gradient-to-r from-rose-400 to-rose-600 shadow-md')"
+                                 :style="`width: ${tp.loadPercent === '-' ? 0 : tp.loadPercent}%`">
+                            </div>
+                          </div>
+                          <span class="font-bold w-12 text-right text-[14px]"
+                                :class="tp.loadPercent === '-' ? 'text-slate-400' : (tp.loadPercent >= 98 ? 'text-slate-700' : 'text-rose-600')"
+                                x-text="tp.loadPercent === '-' ? '-' : tp.loadPercent + '%'"></span>
+                        </div>
+                      </td>
+                      
                     </tr>
                   </template>
+                  <!-- กรณีไม่มีข้อมูล -->
+                  <tr x-show="!transporterPerformance || transporterPerformance.length === 0">
+                    <td colspan="4" class="p-10 text-center text-slate-400 font-medium bg-slate-50">ไม่มีข้อมูลผลงานขนส่งในช่วงเวลานี้</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
