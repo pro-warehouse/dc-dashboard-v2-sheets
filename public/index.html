@@ -6319,18 +6319,52 @@
         },
 
         renderExecCharts() {
-          // 🟢 วาดกราฟ Hourly Allocation (ปริมาณงานจ่ายลงสายพาน)
+          // 1. กราฟแนวโน้มประสิทธิภาพ DC
+          const dcTrendCtx = document.getElementById('execDcChart');
+          if (dcTrendCtx) {
+            if (this.execDcChartInstance) this.execDcChartInstance.destroy();
+            this.execDcChartInstance = new Chart(dcTrendCtx, {
+              type: 'line',
+              data: {
+                labels: this.execAnalytics.weekly.map((w) => w.key),
+                datasets: [
+                  { label: 'Pick On-Time', data: this.execAnalytics.weekly.map((w) => (w.pickOnTime === '-' ? null : w.pickOnTime)), borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.3, fill: true },
+                  { label: 'QC On-Time', data: this.execAnalytics.weekly.map((w) => (w.qcOnTime === '-' ? null : w.qcOnTime)), borderColor: '#0aa66c', backgroundColor: 'rgba(10, 166, 108, 0.1)', tension: 0.3, fill: true },
+                ],
+              },
+              options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 100 } } },
+            });
+          }
+
+          // 2. กราฟแนวโน้มประสิทธิภาพการขนส่ง
+          const tpTrendCtx = document.getElementById('execTpChart');
+          if (tpTrendCtx) {
+            if (this.execTpChartInstance) this.execTpChartInstance.destroy();
+            this.execTpChartInstance = new Chart(tpTrendCtx, {
+              type: 'line',
+              data: {
+                labels: this.execAnalytics.weekly.map((w) => w.key),
+                datasets: [
+                  { label: 'Truck On-Time', data: this.execAnalytics.weekly.map((w) => (w.truckOnTime === '-' ? null : w.truckOnTime)), borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.3, fill: true },
+                  { label: 'Load On-Time', data: this.execAnalytics.weekly.map((w) => (w.loadOnTime === '-' ? null : w.loadOnTime)), borderColor: '#0aa66c', backgroundColor: 'rgba(10, 166, 108, 0.1)', tension: 0.3, fill: true },
+                ],
+              },
+              options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 100 } } },
+            });
+          }
+
+          // 3. กราฟปริมาณงานจ่ายลงสายพาน (Hourly Allocation)
           const hourlyCtx = document.getElementById('hourlyAllocChart');
           if (hourlyCtx) {
             if (this.hourlyAllocChartInstance) this.hourlyAllocChartInstance.destroy();
             this.hourlyAllocChartInstance = new Chart(hourlyCtx, {
               type: 'bar',
               data: {
-                labels: this.execAnalytics.hourlyAlloc.map(h => h.hour),
+                labels: this.execAnalytics.hourlyAlloc ? this.execAnalytics.hourlyAlloc.map(h => h.hour) : [],
                 datasets: [
-                  { label: 'DM02', data: this.execAnalytics.hourlyAlloc.map(h => h.dm02), backgroundColor: '#3b82f6', borderRadius: 4, stack: 'Stack 0' },
-                  { label: 'DP02', data: this.execAnalytics.hourlyAlloc.map(h => h.dp02), backgroundColor: '#f59e0b', borderRadius: 4, stack: 'Stack 0' },
-                  { label: 'Other', data: this.execAnalytics.hourlyAlloc.map(h => h.other), backgroundColor: '#94a3b8', borderRadius: 4, stack: 'Stack 0' }
+                  { label: 'DM02', data: this.execAnalytics.hourlyAlloc ? this.execAnalytics.hourlyAlloc.map(h => h.dm02) : [], backgroundColor: '#3b82f6', borderRadius: 4, stack: 'Stack 0' },
+                  { label: 'DP02', data: this.execAnalytics.hourlyAlloc ? this.execAnalytics.hourlyAlloc.map(h => h.dp02) : [], backgroundColor: '#f59e0b', borderRadius: 4, stack: 'Stack 0' },
+                  { label: 'Other', data: this.execAnalytics.hourlyAlloc ? this.execAnalytics.hourlyAlloc.map(h => h.other) : [], backgroundColor: '#94a3b8', borderRadius: 4, stack: 'Stack 0' }
                 ]
               },
               options: {
@@ -6342,8 +6376,8 @@
                 plugins: { legend: { position: 'top', labels: { font: { family: 'Kanit', size: 11, usePointStyle: true } } } }
               }
             });
-          },
-
+          }
+        },
         fetchLast204Time() {
           fetch('/api/last-204-time')
             .then((res) => res.json())
