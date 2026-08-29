@@ -149,6 +149,68 @@
     .dash-table tbody tr:hover {
       background-color: #eff6ff !important;
     }
+    /* ========================================================= */
+    /* 🔵 ปรับโฉม EXECUTIVE DASHBOARD ให้สวยงามและตัวอักษรอ่านง่ายขึ้น */
+    /* ขอบเขตเฉพาะ #dashboardScrollArea (ไม่กระทบหน้าปฏิบัติงานแน่นอน) */
+    /* ========================================================= */
+    
+    /* 1. ปรับ Card ให้ขอบมนสวยงาม และมีเงา (Shadow) ละมุนตาเหมือน Reference */
+    #dashboardScrollArea .rounded-2xl {
+      border-radius: 16px !important;
+      border: 1px solid #f1f5f9 !important;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01) !important;
+      background-color: #ffffff !important;
+    }
+
+    /* 2. ขยายตัวหนังสือในตารางทั้งหมด (แก้ปัญหาตัวอักษรเล็กเกินไป) */
+    /* เจาะจงเฉพาะ .compact-table และ .dash-table เพื่อไม่ให้กระทบตาราง Heatmap */
+    #dashboardScrollArea .compact-table th,
+    #dashboardScrollArea .dash-table th {
+      font-size: 13px !important;
+      padding: 16px 12px !important;
+      letter-spacing: 0.5px;
+    }
+    
+    #dashboardScrollArea .compact-table td,
+    #dashboardScrollArea .dash-table td {
+      font-size: 13px !important;
+      padding: 14px 12px !important;
+    }
+    
+    /* บังคับตัวหนังสือข้างใน <span> ในตารางให้ใหญ่ตามไปด้วย */
+    #dashboardScrollArea .compact-table td span,
+    #dashboardScrollArea .dash-table td span {
+      font-size: 13px !important;
+    }
+
+    /* 3. ปรับขนาดหัวข้อ (Header) ในแต่ละการ์ดให้โดดเด่นและชัดเจนขึ้น */
+    #dashboardScrollArea h3 {
+      font-size: 15px !important;
+      font-weight: 700 !important;
+      color: #1e293b !important;
+      letter-spacing: 0.2px;
+      margin-bottom: 20px !important;
+    }
+
+    /* 4. ปรับตัวเลขสถิติบน Card 4 ใบแรกด้านบนสุดให้ใหญ่สะใจ */
+    #dashboardScrollArea .text-3xl {
+      font-size: 2.5rem !important; /* ประมาณ 40px */
+      font-weight: 800 !important;
+      color: #0f172a !important;
+      margin-top: 8px !important;
+    }
+    
+    /* ปรับตัวหนังสือ Label ของ Card 4 ใบแรกให้อ่านง่ายขึ้น */
+    #dashboardScrollArea .text-\\[11px\\].uppercase {
+      font-size: 13px !important;
+      font-weight: 700 !important;
+      color: #64748b !important;
+    }
+    
+    /* ปรับขยายตัวอักษรโซนภาพรวม PICK & QC ให้บาลานซ์กับกล่อง */
+    #dashboardScrollArea .text-5xl {
+      font-size: 3.5rem !important;
+    }
   </style>
 </head>
 
