@@ -1692,16 +1692,66 @@
           </div>
         </div>
       </div>
-      <!-- 🟢 กราฟปริมาณงานจ่ายลงสายพาน (Hourly Allocation) -->
-        <div class="rounded-2xl p-5 relative flex flex-col bg-white shadow-sm border border-slate-200/60 w-full h-[340px] mt-4">
-          <h3 class="text-[12px] font-bold text-slate-800 mb-2 uppercase tracking-widest flex items-center gap-2 flex-shrink-0">
-            <i class="fas fa-boxes text-indigo-500 bg-indigo-50 p-1.5 rounded-lg"></i>
-            ปริมาณงานจ่ายลงสายพานรายชั่วโมง (Hourly Allocated Volume)
-          </h3>
-          <div class="flex-1 w-full relative min-h-0 mt-2">
-            <canvas id="hourlyAllocChart"></canvas>
+      <!-- 🟢 กราฟปริมาณงานจ่ายลงสายพาน (Hourly Allocation) พร้อมตาราง Heatmap -->
+      <div class="rounded-2xl p-5 relative flex flex-col bg-white shadow-sm border border-slate-200/60 w-full min-h-[460px] mt-4">
+        <h3 class="text-[12px] font-bold text-slate-800 mb-2 uppercase tracking-widest flex items-center gap-2 flex-shrink-0">
+          <i class="fas fa-boxes text-indigo-500 bg-indigo-50 p-1.5 rounded-lg"></i>
+          ปริมาณงานจ่ายลงสายพานรายชั่วโมง (Hourly Allocated Volume)
+        </h3>
+        
+        <!-- ส่วนแสดงผลกราฟ -->
+        <div class="flex-1 w-full relative min-h-[250px] mt-2">
+          <canvas id="hourlyAllocChart"></canvas>
+        </div>
+        
+        <!-- 🟢 เพิ่มตาราง Heatmap ด้านล่างกราฟ -->
+        <div class="mt-4 overflow-x-auto custom-scrollbar border-t border-slate-100 pt-4">
+          <table class="w-full text-center border-collapse table-fixed min-w-[700px]">
+            <thead class="border-b-2 border-slate-100">
+              <tr>
+                <th class="py-1.5 text-slate-500 uppercase w-14 text-[9px] font-bold text-left pl-2">ทีม</th>
+                <template x-for="h in execAnalytics.hourlyAlloc" :key="'th'+h.hour">
+                  <th class="py-1.5 text-slate-400 font-semibold text-[9px] text-center" x-text="h.hour.split(':')[0] + ':00'"></th>
+                </template>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- แถว DM02 -->
+              <tr class="border-b border-slate-50">
+                <td class="py-1.5 font-bold text-blue-500 text-[9px] text-left pl-2 border-r border-slate-100">DM02</td>
+                <template x-for="h in execAnalytics.hourlyAlloc" :key="'dm'+h.hour">
+                  <td class="p-[1px] text-[9px] text-slate-500 font-medium" x-text="h.dm02 > 0 ? (h.dm02 >= 1000 ? (h.dm02/1000).toFixed(1)+'k' : h.dm02) : '-'"></td>
+                </template>
+              </tr>
+              <!-- แถว DP02 -->
+              <tr class="border-b border-slate-50">
+                <td class="py-1.5 font-bold text-amber-500 text-[9px] text-left pl-2 border-r border-slate-100">DP02</td>
+                <template x-for="h in execAnalytics.hourlyAlloc" :key="'dp'+h.hour">
+                  <td class="p-[1px] text-[9px] text-slate-500 font-medium" x-text="h.dp02 > 0 ? (h.dp02 >= 1000 ? (h.dp02/1000).toFixed(1)+'k' : h.dp02) : '-'"></td>
+                </template>
+              </tr>
+              <!-- แถวรวมทั้งหมด (Heatmap แดง/เหลือง/เขียว) -->
+              <tr class="bg-slate-50/50">
+                <td class="py-2 font-bold text-slate-700 text-[9px] text-left pl-2 border-r border-slate-100">รวม (Total)</td>
+                <template x-for="h in execAnalytics.hourlyAlloc" :key="'tot'+h.hour">
+                  <td class="p-[2px]">
+                    <div class="flex items-center justify-center font-bold transition-all w-full h-[22px] rounded-[4px] text-[9px]"
+                      :class="(h.dm02+h.dp02+h.other) === 0 ? 'bg-slate-100 text-slate-300' : ((h.dm02+h.dp02+h.other) > 10000 ? 'bg-rose-500 text-white shadow-sm' : ((h.dm02+h.dp02+h.other) > 5000 ? 'bg-amber-400 text-white shadow-sm' : 'bg-emerald-100 text-emerald-700'))"
+                      x-text="(h.dm02+h.dp02+h.other) > 0 ? ((h.dm02+h.dp02+h.other) >= 1000 ? ((h.dm02+h.dp02+h.other)/1000).toFixed(1)+'k' : (h.dm02+h.dp02+h.other)) : '-'"
+                      :title="'ยอดรวมทั้งหมด: ' + (h.dm02+h.dp02+h.other).toLocaleString() + ' ชิ้น'"></div>
+                  </td>
+                </template>
+              </tr>
+            </tbody>
+          </table>
+          <!-- แถบอธิบายสีกำกับ -->
+          <div class="flex justify-end gap-3 mt-2 text-[8px] font-medium text-slate-400">
+            <span class="flex items-center gap-1"><div class="w-2 h-2 bg-emerald-100 rounded-sm"></div> ปกติ (ไม่เกิน 5k)</span>
+            <span class="flex items-center gap-1"><div class="w-2 h-2 bg-amber-400 rounded-sm"></div> &gt; 5,000 ชิ้น</span>
+            <span class="flex items-center gap-1"><div class="w-2 h-2 bg-rose-500 rounded-sm"></div> &gt; 10,000 ชิ้น</span>
           </div>
         </div>
+      </div>
       <div class="flex flex-col gap-4 mt-4">
         <h2 class="text-sm font-bold text-slate-800 border-b border-slate-200 pb-2 uppercase tracking-wide flex items-center gap-2">
           <i class="fas fa-truck text-emerald-600 bg-emerald-50 p-1.5 rounded-lg"></i>
@@ -5322,7 +5372,13 @@
             shifts: this.settings.shifts,
             maxLimits: this.settings.maxLimits,
           };
+          
+          // 🟢 แก้ไข: บันทึกทุกค่าลง localStorage เพื่อไม่ให้รีเฟรชแล้วค่ากลับไปเป็นค่าเดิม
           localStorage.setItem('dc_settings_maxLimits', JSON.stringify(this.settings.maxLimits));
+          localStorage.setItem('dc_settings_beans', JSON.stringify(this.settings.beans));
+          localStorage.setItem('dc_settings_slas', JSON.stringify(this.settings.slas));
+          localStorage.setItem('dc_settings_penalty', JSON.stringify(this.settings.penaltyRate));
+          localStorage.setItem('dc_settings_shifts', JSON.stringify(this.settings.shifts));
 
           Swal.fire({ title: 'กำลังบันทึกการตั้งค่า...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
           fetch('/api/settings/save', {
