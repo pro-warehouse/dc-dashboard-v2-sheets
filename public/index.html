@@ -6322,33 +6322,71 @@
               data: {
                 labels: topTp.map((t) => (t.name.length > 15 ? t.name.substring(0, 12) + '...' : t.name)),
                 datasets: [
-                  { label: 'รถเข้า On-Time %', data: topTp.map((t) => (t.truckPercent === '-' ? 0 : t.truckPercent)), backgroundColor: '#3b82f6', borderRadius: 4 },
-                  { label: 'โหลด On-Time %', data: topTp.map((t) => (t.loadPercent === '-' ? 0 : t.loadPercent)), backgroundColor: '#0aa66c', borderRadius: 4 },
+                  { 
+                    label: 'รถเข้า On-Time %', 
+                    data: topTp.map((t) => (t.truckPercent === '-' ? 0 : t.truckPercent)), 
+                    backgroundColor: (context) => {
+                      const chart = context.chart;
+                      const {ctx, chartArea} = chart;
+                      if (!chartArea) return null;
+                      const value = context.raw || 0;
+                      let gradient = ctx.createLinearGradient(chartArea.left, 0, chartArea.right, 0);
+                      
+                      // 🔴 ถ้าน้อยกว่า 98% ให้ไล่สีแดง
+                      if (value < 98) {
+                        gradient.addColorStop(0, '#fecdd3'); 
+                        gradient.addColorStop(1, '#e11d48'); 
+                      } else {
+                      // 🔵 ถ้า 98% ขึ้นไป ให้ไล่สีฟ้า-น้ำเงิน
+                        gradient.addColorStop(0, '#93c5fd'); 
+                        gradient.addColorStop(1, '#2563eb'); 
+                      }
+                      return gradient;
+                    }, 
+                    borderRadius: 4 
+                  },
+                  { 
+                    label: 'โหลด On-Time %', 
+                    data: topTp.map((t) => (t.loadPercent === '-' ? 0 : t.loadPercent)), 
+                    backgroundColor: (context) => {
+                      const chart = context.chart;
+                      const {ctx, chartArea} = chart;
+                      if (!chartArea) return null;
+                      const value = context.raw || 0;
+                      let gradient = ctx.createLinearGradient(chartArea.left, 0, chartArea.right, 0);
+                      
+                      // 🔴 ถ้าน้อยกว่า 98% ให้ไล่สีแดง
+                      if (value < 98) {
+                        gradient.addColorStop(0, '#fecdd3'); 
+                        gradient.addColorStop(1, '#e11d48'); 
+                      } else {
+                      // 🟢 ถ้า 98% ขึ้นไป ให้ไล่สีเขียว
+                        gradient.addColorStop(0, '#86efac'); 
+                        gradient.addColorStop(1, '#059669'); 
+                      }
+                      return gradient;
+                    }, 
+                    borderRadius: 4 
+                  },
                 ],
               },
               options: {
-                responsive: true, maintainAspectRatio: false, barPercentage: 0.6, categoryPercentage: 0.8,
-                scales: { y: { min: 0, max: 100, ticks: { stepSize: 20 } }, x: { grid: { display: false }, ticks: { font: { size: 10, family: 'Kanit' } } } },
+                indexAxis: 'y', // 🟢 ปรับให้เป็นกราฟแท่งแนวนอน (Horizontal Bar)
+                responsive: true, 
+                maintainAspectRatio: false, 
+                barPercentage: 0.7, 
+                categoryPercentage: 0.8,
+                scales: { 
+                  x: { min: 0, max: 100, ticks: { stepSize: 20 } }, // 🟢 สลับแกน x ให้เป็นตัวเลข %
+                  y: { grid: { display: false }, ticks: { font: { size: 10, family: 'Kanit' } } } 
+                },
                 plugins: { legend: { labels: { font: { family: 'Kanit' } } } },
               },
             });
           }
+          
+          // โค้ดส่วน dcTrendCtx และ execTpChart ด้านล่างปล่อยไว้เหมือนเดิม...
           const dcTrendCtx = document.getElementById('execDcChart');
-          if (dcTrendCtx) {
-            if (this.execDcChartInstance) this.execDcChartInstance.destroy();
-            this.execDcChartInstance = new Chart(dcTrendCtx, {
-              type: 'line',
-              data: {
-                labels: this.execAnalytics.weekly.map((w) => w.key),
-                datasets: [
-                  { label: 'Pick', data: this.execAnalytics.weekly.map((w) => (w.pickOnTime === '-' ? null : w.pickOnTime)), borderColor: '#3b82f6', tension: 0.3 },
-                  { label: 'QC', data: this.execAnalytics.weekly.map((w) => (w.qcOnTime === '-' ? null : w.qcOnTime)), borderColor: '#0aa66c', tension: 0.3 },
-                ],
-              },
-              options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 100 } } },
-            });
-          }
-          const tpTrendCtx = document.getElementById('execTpChart');
           if (tpTrendCtx) {
             if (this.execTpChartInstance) this.execTpChartInstance.destroy();
             this.execTpChartInstance = new Chart(tpTrendCtx, {
