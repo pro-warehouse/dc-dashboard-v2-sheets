@@ -1693,32 +1693,6 @@
         </div>
       </div>
       <!-- 🟢 กราฟปริมาณงานจ่ายลงสายพาน (Hourly Allocation) พร้อมตาราง Heatmap แบบกระชับ -->
-      <div class="rounded-2xl p-5 relative flex flex-col bg-white shadow-sm border border-slate-200/60 w-full mt-4">
-        
-        <!-- Header & Filters -->
-        <div class="flex flex-wrap items-center justify-between mb-4 gap-2 border-b border-slate-100 pb-3">
-          <h3 class="text-[12px] font-bold text-slate-800 uppercase tracking-widest flex items-center gap-2">
-            <i class="fas fa-boxes text-indigo-500 bg-indigo-50 p-1.5 rounded-lg"></i>
-            ปริมาณงานจ่ายลงสายพานรายชั่วโมง (Hourly Allocated Volume)
-          </h3>
-          <div class="flex items-center gap-2">
-            <div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2 h-8 shadow-sm">
-              <i class="fas fa-calendar-alt text-slate-400 text-[10px]"></i>
-              <input type="date" x-model="hourlyFilter.date" @change="updateHourlyChart()" class="text-[10px] font-bold text-slate-600 bg-transparent outline-none w-[110px]" />
-            </div>
-            <select x-model="hourlyFilter.owner" @change="updateHourlyChart()" class="bg-slate-50 border border-slate-200 rounded-lg px-2 h-8 text-[10px] font-bold outline-none text-slate-700 shadow-sm cursor-pointer">
-              <option value="all">ทุกทีม (All Owners)</option>
-              <option value="DM02">เฉพาะ DM02</option>
-              <option value="DP02">เฉพาะ DP02</option>
-              <option value="Other">เฉพาะ Other</option>
-            </select>
-          </div>
-        </div>
-        
-        <!-- Canvas กราฟ -->
-        <div class="w-full relative h-[240px]">
-          <canvas id="hourlyAllocChart"></canvas>
-        </div>
         
         <!-- ตารางข้อมูลด้านล่าง (ไม่มี Scrollbar โชว์ตัวเลขเรียง 24 ชม.) -->
         <div class="mt-3 pt-3 w-full">
@@ -3341,7 +3315,7 @@
           qcOntimePercent: 0,
           datesFormatted: [],
         },
-        execAnalytics: { monthly: [], weekly: [], tpDaily: [] },
+        execAnalytics: { monthly: [], weekly: [], tpDaily: [], hourlyAlloc: [] },
         transporterPerformance: [],
         vehiclePerformance: [],
         heatmapData: { hours: [], data: [] },
