@@ -1,4 +1,1742 @@
-<!-- 📦 Integrated Pro-Scanner View -->
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DC Project Dashboard</title>
+  <link rel="icon" type="image/png"
+    href="https://i.postimg.cc/L4qLLFNj/Black-White-Modern-Handwritten-Square-Studio-Logo-(15)-Photoroom-0.png" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.x.x/dist/cdn.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            proGreen: '#0aa66c',
+            proRed: '#e11d48',
+            proDark: '#0f172a',
+            modernDark: '#1e293b',
+          },
+          fontFamily: { sans: ['Kanit', 'sans-serif'] },
+        },
+      },
+    };
+  </script>
+  <style>
+    body {
+      font-family: 'Kanit', sans-serif;
+      background-color: #f1f5f9;
+      overflow: hidden;
+      font-size: 12px;
+    }
+
+    [x-cloak] {
+      display: none !important;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #94a3b8;
+      border-radius: 10px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .scroll-area {
+      height: 100%;
+      overflow-y: auto;
+      padding-top: 0;
+    }
+
+    .ops-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      table-layout: auto;
+    }
+
+    .ops-table th,
+    .ops-table td {
+      vertical-align: middle;
+      padding: 4px 6px;
+    }
+
+    .ops-table thead th {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      background-color: #f8fafc;
+      border-bottom: 2px solid #cbd5e1;
+      white-space: nowrap;
+    }
+
+    .ops-table tbody tr {
+      border-bottom: 1px solid #e2e8f0;
+      transition: background-color 0.1s ease;
+    }
+
+    .ops-table tbody tr:hover {
+      background-color: #f1f5f9 !important;
+    }
+
+    .heatmap-cell {
+      min-height: 20px;
+      border-radius: 2px;
+    }
+
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+
+      #printArea,
+      #printArea * {
+        visibility: visible;
+      }
+
+      #printArea {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        padding: 20px;
+      }
+
+      .no-print {
+        display: none !important;
+      }
+    }
+
+    .compact-table th,
+    .compact-table td {
+      padding: 4px 6px !important;
+      vertical-align: middle;
+    }
+
+    .compact-table thead th {
+      font-size: 10px !important;
+      white-space: nowrap;
+    }
+
+    .dash-table tbody tr {
+      height: 36px;
+    }
+
+    .dash-table tbody td {
+      vertical-align: middle;
+    }
+
+    .dash-table tbody tr:nth-child(even) {
+      background-color: #f8fafc;
+    }
+
+    .dash-table tbody tr:hover {
+      background-color: #eff6ff !important;
+    }
+
+    /* ========================================================= */
+    /* 🔵 ปรับแต่งเฉพาะตัวหนังสือในตาราง Dashboard ให้อ่านง่ายขึ้น */
+    /* ========================================================= */
+    
+    /* ปรับแต่งขนาดตารางและตัวหนังสือให้กระชับพอดีสายตา */
+    #dashboardScrollArea .compact-table thead th {
+      font-size: 11px !important;
+      padding: 6px 12px !important;
+      letter-spacing: 0.3px;
+    }
+    
+    #dashboardScrollArea .compact-table tbody td {
+      font-size: 12px !important;
+      padding: 6px 12px !important;
+    }
+    
+    #dashboardScrollArea .compact-table tbody td span {
+      font-size: 12px !important;
+    }
+    
+    /* ขยายตัวอักษรที่เป็นเปอร์เซ็นต์ หรือ Span ด้านใน */
+    #dashboardScrollArea .compact-table tbody td span {
+      font-size: 13px !important;
+    }
+
+    /* ขยาย Label ใต้กล่อง PICK & QC (จาก 10px เป็น 12px) */
+    #dashboardScrollArea .text-\\[10px\\].font-semibold.text-slate-400.uppercase {
+      font-size: 12px !important;
+    }
+  </style>
+</head>
+
+<body class="flex h-screen text-slate-700" x-data="waveManager()">
+  <!-- 🔐 Login Screen -->
+  <div x-show="!currentUser"
+    class="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/90 backdrop-blur-sm" x-cloak>
+    <div
+      class="bg-white rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl border border-slate-200 relative overflow-hidden">
+      <div class="absolute top-0 left-0 w-full h-2 bg-blue-600"></div>
+      <img src="https://i.postimg.cc/L4qLLFNj/Black-White-Modern-Handwritten-Square-Studio-Logo-(15)-Photoroom-0.png"
+        class="w-16 h-16 mx-auto mb-4 bg-slate-50 rounded-xl p-2 shadow-inner border border-slate-200" alt="Logo" />
+      <h2 class="text-xl font-semibold text-slate-800 mb-1 uppercase tracking-tight">
+        System Login
+      </h2>
+      <p class="text-slate-500 text-xs mb-4 font-medium">
+        ระบุรหัสพนักงานเพื่อเข้าใช้งานระบบ
+      </p>
+      <input type="text" x-model="employeeIdInput" placeholder="รหัสพนักงาน" @keyup.enter="login()"
+        class="w-full border-2 border-slate-200 rounded-xl p-3 text-center font-semibold focus:border-blue-500 outline-none mb-4 transition-all uppercase bg-slate-50 focus:bg-white text-slate-800 text-lg shadow-inner" />
+      <button @click="login()" :disabled="isLoggingIn"
+        class="w-full bg-blue-600 text-white py-3.5 rounded-xl font-semibold text-sm shadow-md hover:bg-blue-700 transition-all disabled:opacity-50 tracking-widest uppercase">
+        <span x-show="!isLoggingIn">เข้าสู่ระบบพนักงาน</span><i x-show="isLoggingIn" class="fas fa-spinner fa-spin"></i>
+      </button>
+      <div class="mt-4 border-t border-slate-100 pt-4">
+        <button @click="loginAsGuest()"
+          class="w-full bg-slate-50 text-slate-600 py-3 rounded-xl font-medium text-xs shadow-sm hover:bg-slate-100 transition-all tracking-wide border border-slate-200">
+          <i class="fas fa-eye mr-1"></i>เข้าสู่ระบบแบบ Guest (ดูข้อมูล)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 📱 Sidebar -->
+  <aside class="w-52 bg-proDark flex flex-col items-start py-4 shadow-2xl z-[60] no-print">
+    <div class="flex items-center justify-center w-full mb-6 px-4">
+      <img src="https://i.postimg.cc/L4qLLFNj/Black-White-Modern-Handwritten-Square-Studio-Logo-(15)-Photoroom-0.png"
+        class="w-10 h-10 rounded-lg bg-white p-1 flex-shrink-0" alt="DC Logo" />
+      <span class="ml-3 font-semibold text-lg tracking-tight text-white whitespace-nowrap">DC OPS</span>
+    </div>
+    <nav class="flex flex-col space-y-1 w-full px-3 text-slate-400 font-medium flex-1 pb-2">
+      <button @click="switchView('operations')"
+        class="w-full h-11 rounded-lg flex items-center justify-start px-3 transition-all"
+        :class="currentView === 'operations' ? 'bg-proGreen text-white shadow-sm font-semibold' : 'hover:bg-slate-800 hover:text-white'">
+        <i class="fas fa-tasks text-sm w-6"></i><span class="text-xs">ปฏิบัติงาน</span>
+      </button>
+      <button @click="switchView('transporter')"
+        class="w-full h-11 rounded-lg flex items-center justify-start px-3 transition-all"
+        :class="currentView === 'transporter' ? 'bg-indigo-500 text-white shadow-sm font-semibold' : 'hover:bg-slate-800 hover:text-white'">
+        <i class="fas fa-truck-moving text-sm w-6"></i><span class="text-xs">จัดการรถเข้า</span>
+      </button>
+      <button @click="switchView('combineWeb')"
+        class="w-full h-11 rounded-lg flex items-center justify-start px-3 transition-all mt-2"
+        :class="currentView === 'combineWeb' ? 'bg-fuchsia-600 text-white shadow-sm font-semibold' : 'hover:bg-slate-800 hover:text-white'">
+        <i class="fas fa-table text-sm w-6"></i><span class="text-xs">สรุปจัดบรรจุ (Web)</span>
+      </button>
+      <button @click="switchView('dashboard')"
+        class="w-full h-11 rounded-lg flex items-center justify-start px-3 transition-all mt-2"
+        :class="currentView === 'dashboard' || currentView === 'exec' ? 'bg-blue-500 text-white shadow-sm font-semibold' : 'hover:bg-slate-800 hover:text-white'">
+        <i class="fas fa-chart-pie text-sm w-6"></i><span class="text-xs">แดชบอร์ด</span>
+        <div class="ml-auto flex items-center">
+          <i x-show="isDashboardLoading" class="fas fa-circle-notch fa-spin text-blue-300 text-[10px]"></i><i
+            x-show="!isDashboardLoading" class="fas fa-check text-emerald-400 text-[10px]"></i>
+        </div>
+      </button>
+      <button x-show="!isGuest" @click="switchView('logs')"
+        class="w-full h-11 rounded-lg flex items-center justify-start px-3 transition-all"
+        :class="currentView === 'logs' ? 'bg-slate-600 text-white shadow-sm font-semibold' : 'hover:bg-slate-800 hover:text-white'">
+        <i class="fas fa-history text-sm w-6"></i><span class="text-xs">Logs</span>
+      </button>
+      <div class="mt-auto pt-4 border-t border-slate-700 w-full flex flex-col gap-2">
+        <button @click="logout()"
+          class="w-full h-10 rounded-lg flex items-center justify-start px-3 text-slate-400 hover:bg-rose-500/20 hover:text-rose-400 transition-all">
+          <i class="fas fa-sign-out-alt text-sm w-6"></i><span class="text-[11px] font-medium">ออกจากระบบ</span>
+        </button>
+        <div class="px-4">
+          <span class="text-[9px] font-medium text-slate-500 tracking-widest uppercase">Version <span
+              x-text="currentAppVersion"></span></span>
+        </div>
+      </div>
+    </nav>
+  </aside>
+  <!-- 🖥️ Main View -->
+  <main class="flex-1 flex flex-col h-screen overflow-hidden relative bg-slate-50">
+    <!-- Header -->
+    <header
+      class="h-14 bg-white flex items-center justify-between px-6 flex-shrink-0 z-40 border-b border-slate-200 shadow-sm">
+      <div class="flex items-center gap-3">
+        <div class="text-slate-500 flex items-center gap-2.5 text-xs font-semibold tracking-widest uppercase">
+          <span class="text-blue-600">DC OPS</span><i class="fas fa-chevron-right text-[10px] opacity-40 mt-0.5"></i>
+          <span class="text-slate-800 text-sm tracking-wide"
+            x-text="currentView === 'operations' ? 'ปฏิบัติงาน (OPERATIONS)' : (currentView === 'combineWeb' ? 'สรุปการจัดบรรจุ (COMBINE CENTER)' : (currentView === 'transporter' ? 'จัดการรถเข้า (DOCK)' : (currentView === 'dashboard' || currentView === 'exec' ? 'แดชบอร์ด (EXECUTIVE)' : 'Logs')))"></span>
+        </div>
+      </div>
+      <div class="flex items-center gap-4">
+        <button @click="fetchDataFromDB(true); fetchLogsFromDB();"
+          class="flex items-center gap-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-700 px-3 py-1.5 rounded-full text-[10px] font-semibold border border-indigo-200 transition-all shadow-sm uppercase tracking-wider active:scale-95">
+          <i class="fas fa-sync-alt" :class="(isLoading || isDashboardLoading) ? 'fa-spin' : ''"></i><span
+            class="hidden md:inline">Refresh</span>
+        </button>
+        <div x-show="currentUser" @click="isGuest ? login() : switchUser()"
+          class="flex items-center gap-3 bg-white hover:bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-full no-print shadow-md cursor-pointer transition-all active:scale-95 group">
+          <div
+            class="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-semibold group-hover:bg-blue-700"
+            x-text="currentUser && currentUser !== 'Guest' ? currentUser.charAt(0) : 'G'"></div>
+          <div class="flex flex-col leading-none hidden md:flex">
+            <span class="text-[10px] font-semibold text-slate-800 uppercase" x-text="currentUser"></span><span
+              class="text-[9px] font-medium text-slate-500" x-text="'ID: ' + userId"></span>
+          </div>
+          <i
+            class="fas fa-exchange-alt text-[9px] text-blue-400 opacity-0 group-hover:opacity-100 ml-1 hidden md:inline"></i>
+          <span x-show="isGuest"
+            class="bg-amber-100 text-amber-700 text-[9px] px-2 py-0.5 rounded-full font-semibold ml-1 border border-amber-200 shadow-sm hidden md:inline"><i
+              class="fas fa-eye mr-1"></i>GUEST</span>
+        </div>
+        <div
+          class="bg-slate-800 px-4 py-1.5 rounded-full text-white text-xs font-mono tracking-widest border border-slate-700 shadow-inner hidden lg:block">
+          <span x-text="currentTime"></span>
+        </div>
+      </div>
+    </header>
+
+    <!-- 🏷️ Filters Area -->
+    <div class="bg-white border-b border-slate-200 px-6 py-3 flex flex-col gap-3 relative z-[50] no-print shadow-sm"
+      x-show="['operations', 'transporter'].includes(currentView)">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <button @click="downloadTemplate()"
+            class="h-8 px-3 rounded-lg bg-white border border-slate-300 text-slate-600 flex items-center gap-2 hover:bg-slate-50 transition-all shadow-sm text-[10px] font-medium">
+            <i class="fas fa-file-download text-blue-500"></i> Template
+          </button>
+          <label x-show="!isGuest"
+            class="cursor-pointer h-8 px-3 rounded-lg bg-blue-600 text-white flex items-center gap-2 shadow-md hover:bg-blue-700 transition-all active:scale-95 text-[10px] font-medium"><i
+              class="fas fa-file-import"></i> นำเข้าแผนงาน<input type="file" class="hidden"
+              @change="handleExcelUpload($event)" /></label>
+          <button @click="exportWaveList()"
+            class="h-8 px-3 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 flex items-center gap-2 hover:bg-indigo-100 transition-all shadow-sm text-[10px] font-medium">
+            <i class="fas fa-file-export"></i> Export แผนงาน
+          </button>
+          <label
+            class="cursor-pointer h-8 px-3 rounded-lg bg-emerald-600 text-white flex items-center gap-2 shadow-md hover:bg-emerald-700 transition-all active:scale-95 text-[10px] font-medium"><i
+              class="fas fa-file-excel"></i> Import 204
+            <input type="file" class="hidden" accept=".xlsx, .xls" @change="handle204Upload($event)" /></label>
+          <div class="flex flex-col justify-center ml-2 border-l border-slate-300 pl-3">
+            <span class="text-[8px] text-slate-400 font-semibold uppercase tracking-widest leading-none mb-0.5">204 Last
+              Sync</span>
+            <span class="text-[10px] font-bold text-emerald-600 leading-none" x-text="last204Time"></span>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <div
+            class="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-200 text-[10px] font-medium">
+            <div x-show="filterTab === 'all'"
+              class="px-2 py-1 bg-white rounded text-slate-500 border border-slate-100 flex items-center gap-1.5">
+              <i class="fas fa-pause-circle text-slate-400"></i> รอทำ:<span class="text-slate-800 font-bold"
+                x-text="computedWaveStats.pending"></span>
+            </div>
+            <div x-show="filterTab === 'all'"
+              class="px-2 py-1 bg-white rounded text-slate-500 border border-slate-100 flex items-center gap-1.5">
+              <i class="fas fa-play-circle text-blue-500"></i> กำลังทำ:<span class="text-blue-600 font-bold"
+                x-text="computedWaveStats.doing"></span>
+            </div>
+            <div x-show="filterTab === 'done'"
+              class="px-2 py-1 bg-white rounded text-slate-500 border border-slate-100 flex items-center gap-1.5">
+              <i class="fas fa-check-circle text-proGreen"></i> เสร็จ:<span class="text-proGreen font-bold"
+                x-text="computedWaveStats.done"></span>
+            </div>
+          </div>
+          <div
+            class="flex items-center gap-2 bg-slate-800 p-1.5 rounded-lg border border-slate-700 text-[10px] font-medium shadow-inner"
+            x-cloak>
+            <div
+              class="px-2 py-1 bg-rose-900/50 rounded text-rose-300 border border-rose-700 flex items-center gap-1.5">
+              <i class="fas fa-clipboard-list text-rose-400"></i> รอจ่าย:<span class="text-white font-bold"
+                x-text="computedAllocationStats.pendingPieces.toLocaleString()"></span>
+              pcs
+            </div>
+            <div class="h-4 w-px bg-slate-600 mx-0.5"></div>
+            <div
+              class="px-2 py-1 bg-slate-700 rounded text-slate-300 border border-slate-600 flex items-center gap-1.5">
+              <i class="fas fa-cubes text-emerald-400"></i> กำลังทำ:
+              <span class="text-white font-bold" x-text="computedAllocationStats.totalPieces.toLocaleString()"></span>
+              pcs
+            </div>
+            <div class="h-4 w-px bg-slate-600 mx-0.5"></div>
+            <div class="px-2 py-1 flex items-baseline gap-1">
+              <span class="text-slate-400">DM02:</span>
+              <span class="text-indigo-400 font-bold flex items-baseline gap-0.5">
+                <span x-text="computedAllocationStats.dm02.toLocaleString()"></span>
+                <span class="text-slate-500 text-[8px] font-medium"
+                  x-text="'/ ' + (settings.maxLimits.DM02 || 0).toLocaleString()"></span>
+              </span>
+            </div>
+            <div class="px-2 py-1 flex items-baseline gap-1">
+              <span class="text-slate-400">DP02:</span>
+              <span class="text-amber-400 font-bold flex items-baseline gap-0.5">
+                <span x-text="computedAllocationStats.dp02.toLocaleString()"></span>
+                <span class="text-slate-500 text-[8px] font-medium"
+                  x-text="'/ ' + (settings.maxLimits.DP02 || 0).toLocaleString()"></span>
+              </span>
+            </div>
+            <div class="px-2 py-1 flex items-baseline gap-1">
+              <span class="text-slate-400">Other:</span>
+              <span class="text-rose-400 font-bold flex items-baseline gap-0.5">
+                <span x-text="computedAllocationStats.other.toLocaleString()"></span>
+                <span class="text-slate-500 text-[8px] font-medium"
+                  x-text="'/ ' + (settings.maxLimits.Other || 0).toLocaleString()"></span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-slate-100">
+        <div class="flex items-center gap-2">
+          <div class="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+            <button @click="filterTab = 'all'; transporterActiveFilter = 'all'"
+              :class="filterTab === 'all' ? 'bg-white text-blue-600 shadow-sm font-semibold' : 'text-slate-500 hover:text-slate-700 font-medium'"
+              class="px-4 py-1 rounded-md text-[10px] transition-all uppercase tracking-widest">
+              ดำเนินการ
+            </button>
+            <button @click="filterTab = 'done'; transporterActiveFilter = 'all'"
+              :class="filterTab === 'done' ? 'bg-white text-slate-800 shadow-sm font-semibold' : 'text-slate-500 hover:text-slate-700 font-medium'"
+              class="px-4 py-1 rounded-md text-[10px] transition-all uppercase tracking-widest">
+              เสร็จสิ้น
+            </button>
+          </div>
+          <div class="h-6 w-px bg-slate-300 mx-1"></div>
+          <div class="flex items-center gap-1 bg-white border border-slate-300 rounded-lg px-2 py-1 shadow-sm">
+            <i class="far fa-calendar-alt text-slate-400 text-[10px]"></i>
+            <input type="date" x-model="filterDateStart"
+              class="text-[9px] font-semibold text-slate-600 outline-none cursor-pointer border-none bg-transparent" />
+            <span class="text-[9px] text-slate-400">-</span>
+            <input type="date" x-model="filterDateEnd"
+              class="text-[9px] font-semibold text-slate-600 outline-none cursor-pointer border-none bg-transparent" />
+            <button @click="filterDateStart=''; filterDateEnd=''" class="text-rose-400 hover:text-rose-600 ml-1">
+              <i class="fas fa-times text-[10px]"></i>
+            </button>
+          </div>
+
+          <div class="relative" @click.away="showOwnerFilter = false">
+            <button @click="showOwnerFilter = !showOwnerFilter"
+              class="bg-white border border-slate-300 px-3 py-1.5 rounded-lg text-[10px] font-medium flex items-center gap-1.5 hover:bg-slate-50 transition-all shadow-sm text-slate-600">
+              <i class="fas fa-users text-indigo-500"></i> Owner
+              <i class="fas fa-chevron-down text-[8px] ml-1"></i>
+            </button>
+            <div x-show="showOwnerFilter" x-transition
+              class="absolute top-full left-0 mt-1 w-40 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-2"
+              x-cloak>
+              <div class="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">
+                <button @click="toggleAllOwners(true)"
+                  class="text-[9px] font-semibold text-blue-600 hover:text-blue-800">
+                  เลือกทั้งหมด
+                </button>
+                <button @click="toggleAllOwners(false)"
+                  class="text-[9px] font-semibold text-rose-500 hover:text-rose-700">
+                  ล้าง
+                </button>
+              </div>
+              <div class="space-y-1">
+                <template x-for="opt in ownerOptions" :key="opt">
+                  <label
+                    class="flex items-center gap-2 p-1.5 hover:bg-slate-50 rounded cursor-pointer transition-colors"><input
+                      type="checkbox" :value="opt" x-model="filterOwners"
+                      class="rounded border-slate-300 text-indigo-600 w-3 h-3" /><span
+                      class="text-[10px] font-medium text-slate-700" x-text="opt"></span></label>
+                </template>
+              </div>
+            </div>
+          </div>
+          <div class="relative" @click.away="showTransporterFilter = false">
+            <button @click="showTransporterFilter = !showTransporterFilter"
+              class="bg-white border border-slate-300 px-3 py-1.5 rounded-lg text-[10px] font-medium flex items-center gap-1.5 hover:bg-slate-50 transition-all shadow-sm text-slate-600">
+              <i class="fas fa-truck text-emerald-500"></i> ขนส่ง<i class="fas fa-chevron-down text-[8px] ml-1"></i>
+            </button>
+            <div x-show="showTransporterFilter" x-transition
+              class="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-2"
+              x-cloak>
+              <div class="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">
+                <button @click="toggleAllTransporters(true)"
+                  class="text-[9px] font-semibold text-blue-600 hover:text-blue-800">
+                  เลือกทั้งหมด
+                </button>
+                <button @click="toggleAllTransporters(false)"
+                  class="text-[9px] font-semibold text-rose-500 hover:text-rose-700">
+                  ล้าง
+                </button>
+              </div>
+              <div class="space-y-1 max-h-40 overflow-y-auto custom-scrollbar">
+                <template x-for="opt in computedUniqueTransporters" :key="opt">
+                  <label
+                    class="flex items-center gap-2 p-1.5 hover:bg-slate-50 rounded cursor-pointer transition-colors select-none"><input
+                      type="checkbox" :value="opt" x-model="filterTransporters"
+                      class="rounded border-slate-300 text-emerald-600 w-3 h-3 pointer-events-none" /><span
+                      class="text-[10px] font-medium text-slate-700 truncate w-32" x-text="opt"
+                      :title="opt"></span></label>
+                </template>
+              </div>
+            </div>
+          </div>
+          <div class="relative" @click.away="showStatusFilter = false" x-show="filterTab === 'all'">
+            <button @click="showStatusFilter = !showStatusFilter"
+              class="bg-white border border-slate-300 px-3 py-1.5 rounded-lg text-[10px] font-medium flex items-center gap-1.5 hover:bg-slate-50 transition-all shadow-sm text-slate-600">
+              <i class="fas fa-filter text-blue-500"></i> สถานะ
+              <i class="fas fa-chevron-down text-[8px] ml-1"></i>
+            </button>
+            <div x-show="showStatusFilter" x-transition
+              class="absolute top-full left-0 mt-1 w-40 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-2"
+              x-cloak>
+              <div class="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">
+                <button @click="toggleAllStatuses(true)"
+                  class="text-[9px] font-semibold text-blue-600 hover:text-blue-800">
+                  เลือกทั้งหมด
+                </button>
+                <button @click="toggleAllStatuses(false)"
+                  class="text-[9px] font-semibold text-rose-500 hover:text-rose-700">
+                  ล้าง
+                </button>
+              </div>
+              <div class="space-y-1">
+                <template x-for="opt in statusOptions" :key="opt">
+                  <label
+                    class="flex items-center gap-2 p-1.5 hover:bg-slate-50 rounded cursor-pointer transition-colors"><input
+                      type="checkbox" :value="opt" x-model="filterStatuses"
+                      class="rounded border-slate-300 text-blue-600 w-3 h-3" /><span
+                      class="text-[10px] font-medium text-slate-700" x-text="opt"></span></label>
+                </template>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button x-show="!isGuest" @click="settings.isOpen = true"
+            class="bg-white border border-slate-300 px-3 py-1.5 rounded-lg text-[10px] font-medium flex items-center gap-1.5 hover:bg-slate-50 transition-all shadow-sm text-slate-600">
+            <i class="fas fa-cog text-slate-500"></i> ตั้งค่า
+          </button>
+          <button x-show="!isGuest" @click="checkShiftAndExecute(() => openDeleteByDateModal())"
+            class="bg-white border border-rose-200 text-rose-500 px-3 py-1.5 rounded-lg text-[10px] font-medium flex items-center gap-1.5 hover:bg-rose-50 transition-all shadow-sm">
+            <i class="fas fa-trash-alt"></i> ลบข้อมูล
+          </button>
+          <div class="relative w-48 ml-1">
+            <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]"></i>
+            <input type="text" x-model.debounce.300ms="searchQuery" placeholder="ค้นหาWave..."
+              class="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-medium focus:outline-none focus:border-blue-400 focus:bg-white transition-all shadow-inner" />
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- 🚀 Operations View -->
+    <div x-show="currentView === 'logs'"
+      class="flex-1 flex flex-col bg-slate-50 relative z-10 h-full p-6 overflow-hidden" x-cloak>
+      <div class="flex justify-between items-end mb-4 flex-shrink-0">
+        <div>
+          <h2 class="text-xl font-bold text-slate-800 uppercase flex items-center gap-2">
+            <i class="fas fa-history text-slate-500"></i> ประวัติการทำรายการ
+            (System Logs)
+          </h2>
+          <p class="text-xs font-medium text-slate-500 mt-1">
+            ข้อมูลจัดเรียงจากล่าสุดไปเก่าสุด
+          </p>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <select x-model="logStatusFilter" @change="logDisplayLimit = 100"
+            class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium focus:outline-none focus:border-blue-500 shadow-sm">
+            <option value="all">ทั้งหมด (All Action)</option>
+            <option value="เริ่มดำเนินการ">เริ่มดำเนินการ (Start)</option>
+            <option value="เสร็จสิ้น">เสร็จสิ้น (Done)</option>
+            <option value="REVERT">ย้อนกลับ (Revert)</option>
+            <option value="CANCEL">ยกเลิก (Cancel)</option>
+            <option value="DELETE">ลบ (Delete)</option>
+          </select>
+
+          <div class="relative w-64 shadow-sm">
+            <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+            <input type="text" x-model="logSearchQuery" @input="logDisplayLimit = 100"
+              placeholder="ค้นหา Wave, ผู้ใช้, Action..."
+              class="w-full pl-8 pr-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium focus:outline-none focus:border-blue-500 transition-all" />
+          </div>
+        </div>
+      </div>
+
+      <div
+        class="flex-1 overflow-y-auto custom-scrollbar bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col">
+        <table class="w-full text-left border-collapse">
+          <thead
+            class="bg-slate-100 text-slate-600 text-[10px] uppercase font-semibold sticky top-0 z-10 shadow-sm border-b border-slate-200">
+            <tr>
+              <th class="p-3 border-r border-slate-200 w-36 text-center">
+                วัน/เวลา (Timestamp)
+              </th>
+              <th class="p-3 border-r border-slate-200 w-48">
+                ผู้ใช้งาน (User)
+              </th>
+              <th class="p-3 border-r border-slate-200 w-32 text-center">
+                Wave ID
+              </th>
+              <th class="p-3">รายละเอียด (Action)</th>
+            </tr>
+          </thead>
+          <tbody class="text-xs text-slate-700">
+            <tr x-show="filteredLogs.length === 0">
+              <td colspan="4" class="text-center py-10 text-slate-400 font-medium bg-slate-50">
+                ไม่มีข้อมูล Log หรือกำลังโหลด...
+              </td>
+            </tr>
+            <template x-for="(log, logIdx) in filteredLogs.slice(0, logDisplayLimit)" :key="'log_' + logIdx + '_' + (log.ts || '')">
+              <tr class="border-b border-slate-100 hover:bg-blue-50/50 transition-colors">
+                <td class="p-3 text-slate-500 font-medium text-[10px] border-r border-slate-100 text-center"
+                  x-text="formatLogTime(log.ts)"></td>
+                <td class="p-3 font-semibold text-slate-800 border-r border-slate-100" x-text="log.user"></td>
+                <td class="p-3 font-bold text-blue-600 text-center border-r border-slate-100"
+                  x-text="standardizeWaveId(log.waveId)"></td>
+                <td class="p-3 font-medium text-slate-600">
+                  <span
+                    :class="String(log.action).includes('REVERT') || String(log.action).includes('ลบ') ? 'text-rose-500 font-bold' : ''"
+                    x-text="log.action"></span>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div x-show="filteredLogs.length > logDisplayLimit"
+          class="flex justify-center py-4 bg-slate-50 border-t border-slate-200 mt-auto sticky bottom-0">
+          <button @click="logDisplayLimit += 100"
+            class="bg-white border border-blue-200 text-xs font-bold text-blue-600 px-6 py-2 rounded-full hover:bg-blue-50 hover:shadow-md transition-all uppercase tracking-widest">
+            แสดงหน้าถัดไป (+100) <i class="fas fa-chevron-down ml-1"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <div x-show="currentView === 'operations'" class="flex-1 scroll-area custom-scrollbar" id="mainScrollArea" x-cloak>
+      <div class="h-full flex flex-col px-6 py-4">
+        <div x-show="isLoading" class="flex flex-col items-center justify-center py-32">
+          <div class="w-12 h-12 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin mb-4 shadow-sm">
+          </div>
+          <p class="text-xs font-semibold text-slate-500 tracking-widest uppercase animate-pulse">
+            Loading Workspace...
+          </p>
+        </div>
+
+        <div x-show="!isLoading && filterTab === 'all'"
+          class="w-full overflow-x-auto bg-white shadow-sm border border-slate-300 mt-2 rounded-xl" x-cloak>
+          <table class="w-full border-collapse text-left whitespace-nowrap min-w-[1450px] ops-table">
+            <thead
+              class="bg-slate-100 text-slate-600 text-[10px] text-center border-b-2 border-slate-300 shadow-sm sticky top-0 z-10 font-semibold">
+              <tr>
+                <th class="p-2 border-r border-slate-300 w-20 align-top">
+                  <div class="mb-1.5 flex justify-between items-center">
+                    <span>แผนหยิบ</span>
+                  </div>
+                  <input type="text" x-model="tableSearch.pickDate" @input.debounce.300ms="refreshDataViews()"
+                    class="w-full px-1.5 py-1 text-[9px] font-normal border border-slate-300 rounded text-slate-700 focus:outline-none focus:border-blue-500 placeholder-slate-300 shadow-inner bg-white"
+                    placeholder="ค้นหา..." />
+                </th>
+                <th class="p-2 border-r border-slate-300 w-24 align-top">
+                  <div class="mb-1.5 flex justify-between items-center">
+                    <span>เวลาเป้าหมายโหลด</span>
+                  </div>
+                  <input type="text" x-model="tableSearch.targetTime" @input.debounce.300ms="refreshDataViews()"
+                    class="w-full px-1.5 py-1 text-[9px] font-normal border border-slate-300 rounded text-slate-700 focus:outline-none focus:border-blue-500 placeholder-slate-300 shadow-inner bg-white"
+                    placeholder="ค้นหา..." />
+                </th>
+
+                <th class="p-2 border-r border-slate-300 w-16 align-top bg-blue-50/50">
+                  <div class="mb-1.5 mt-2 flex justify-center items-center">
+                    <span class="text-blue-600 font-bold">Trip</span>
+                  </div>
+                </th>
+
+                <th class="p-2 border-r border-slate-300 w-16 align-top">
+                  <div class="mb-1.5 flex justify-between items-center">
+                    <span>Owner</span>
+                  </div>
+                  <input type="text" x-model="tableSearch.ownerGroup" @input.debounce.300ms="refreshDataViews()"
+                    class="w-full px-1.5 py-1 text-[9px] font-normal border border-slate-300 rounded text-slate-700 focus:outline-none focus:border-blue-500 placeholder-slate-300 shadow-inner bg-white"
+                    placeholder="ค้นหา..." />
+                </th>
+                <th class="p-2 border-r border-slate-300 w-24 align-top">
+                  <div class="mb-1.5 flex justify-between items-center">
+                    <span>เลขWave</span>
+                  </div>
+                  <input type="text" x-model="tableSearch.waveId" @input.debounce.300ms="refreshDataViews()"
+                    class="w-full px-1.5 py-1 text-[9px] font-normal border border-slate-300 rounded text-slate-700 focus:outline-none focus:border-blue-500 placeholder-slate-300 shadow-inner bg-white"
+                    placeholder="*4567*" />
+                </th>
+                <th class="p-2 border-r border-slate-300 w-16 align-top text-blue-600">
+                  <div class="mb-1.5 mt-2">จำนวน (Pcs)</div>
+                </th>
+                <th class="p-2 border-r border-slate-300 w-16 align-top">
+                  <div class="mb-1.5 mt-2">Sort</div>
+                </th>
+                <th class="p-2 border-r border-slate-300 w-28 align-top">
+                  <div class="mb-1.5 flex justify-between items-center">
+                    <span>ขนส่ง</span>
+                  </div>
+                  <input type="text" x-model="tableSearch.transporter" @input.debounce.300ms="refreshDataViews()"
+                    class="w-full px-1.5 py-1 text-[9px] font-normal border border-slate-300 rounded text-slate-700 focus:outline-none focus:border-blue-500 placeholder-slate-300 shadow-inner bg-white"
+                    placeholder="ค้นหา..." />
+                </th>
+                <th class="p-2 border-r border-slate-300 w-24 align-top">
+                  <div class="mb-1.5 mt-2">เมล็ดกาแฟ</div>
+                </th>
+                <th class="p-2 border-r border-slate-300 w-20 align-top">
+                  <div class="mb-1.5 flex justify-between items-center">
+                    <span>ประเภท</span>
+                  </div>
+                  <input type="text" x-model="tableSearch.vehicleType" @input.debounce.300ms="refreshDataViews()"
+                    class="w-full px-1.5 py-1 text-[9px] font-normal border border-slate-300 rounded text-slate-700 focus:outline-none focus:border-blue-500 placeholder-slate-300 shadow-inner bg-white"
+                    placeholder="ค้นหา..." />
+                </th>
+                <th class="p-2 border-r border-slate-300 w-12 align-top">
+                  <div class="mb-1.5 mt-2">HUB</div>
+                </th>
+                <th class="p-2 border-r border-slate-300 w-24 align-top">
+                  <div class="mb-1.5 mt-2">1. จ่ายงาน</div>
+                </th>
+                <th class="p-2 border-r border-slate-300 w-24 align-top">
+                  <div class="mb-1.5 mt-2">2. พิมพ์LPN</div>
+                </th>
+                <th class="p-2 border-r border-slate-300 w-24 align-top">
+                  <div class="mb-1.5 mt-2">3. หยิบ</div>
+                </th>
+                <th class="p-2 border-r border-slate-300 w-24 align-top">
+                  <div class="mb-1.5 mt-2">4. QC</div>
+                </th>
+                <th class="p-2 w-10 text-slate-400 align-top">
+                  <i class="fas fa-cog mt-2"></i>
+                </th>
+              </tr>
+            </thead>
+            <tbody class="text-[11px] text-slate-700 font-medium">
+              <tr x-show="computedSortedWaves.length === 0">
+                <td colspan="17" class="text-center py-10 text-slate-400 font-medium bg-slate-50">
+                  <i class="fas fa-clipboard-list text-3xl mb-2 text-slate-300 block"></i>
+                  ไม่มีรายการที่ตรงกับเงื่อนไข
+                </td>
+              </tr>
+              <template x-for="(wave, index) in computedSortedWaves.slice(0, displayLimit)" :key="wave.rowKey || wave.id">
+                <tr :id="'wave-row-' + wave.id" class="border-b border-slate-200 transition-colors"
+                  :class="[index % 2 === 0 ? 'bg-white' : 'bg-slate-50', wave.isUrgent && wave.steps[3].status !== 'done' ? '!bg-rose-50' : 'hover:!bg-blue-50/70']">
+                  <td class="p-2 border-r border-slate-200 text-center">
+                    <div class="text-slate-600 font-medium" x-text="wave.pickDateDisplay"></div>
+                    <template x-if="wave.timeChangeCount > 0">
+                      <div class="mt-0.5 inline-flex items-center gap-1 bg-amber-50 text-amber-600 border border-amber-200 rounded px-1.5 py-0.5 text-[8px] font-bold" title="มีการแก้ไขเวลา/เลื่อนคิว">
+                        <i class="fas fa-history text-[8px]"></i> แก้ไขเวลา
+                      </div>
+                    </template>
+                  </td>
+                  <td class="p-2 border-r border-slate-200 text-center font-bold">
+                    <div class="text-blue-700 text-xs"
+                      x-text="wave.targetTimeStr.split('|')[1] ? wave.targetTimeStr.split('|')[1].trim() : wave.targetTimeStr">
+                    </div>
+                    <div class="text-[8px] text-slate-400 font-medium mt-0.5"
+                      x-text="wave.targetTimeStr.split('|')[0] ? wave.targetTimeStr.split('|')[0].trim() : ''"></div>
+                  </td>
+                  <td class="p-2 border-r border-slate-200 text-center font-bold text-blue-600 bg-blue-50/50 text-sm"
+                    x-text="wave.tripNo"></td>
+                  <td class="p-0 border-r border-slate-200 text-center font-bold"
+                    :class="wave.ownerGroup === 'DM02' ? 'bg-emerald-100 text-emerald-800' : (wave.ownerGroup === 'DP02' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600')">
+                    <div class="w-full h-full min-h-[50px] flex items-center justify-center" x-text="wave.ownerGroup">
+                    </div>
+                  </td>
+                  <td class="p-2 border-r border-slate-200 text-center font-bold text-slate-800 text-xs">
+                    <div x-text="wave.id"></div>
+                    <div class="text-[9px] text-blue-600" x-text="wave.bookingNo"></div>
+                    <template x-if="(wave.steps[4].status === 'done' || wave.steps[4].status === 'doing') && wave.steps[2].status !== 'done'">
+                      <div class="mt-1 inline-flex items-center gap-1 bg-rose-100 text-rose-700 border border-rose-300 rounded px-1.5 py-0.5 text-[8px] font-bold animate-pulse leading-tight"
+                        title="รถเข้ามาแล้วแต่ยังหยิบไม่เสร็จ">
+                        <i class="fas fa-truck-fast"></i> รถเข้าแล้ว! ยังหยิบไม่เสร็จ
+                      </div>
+                    </template>
+                  </td>
+                  <td class="p-2 border-r border-slate-200 text-center font-bold text-blue-700 bg-blue-50/50"
+                    x-text="getDisplayTotalPieces(wave).toLocaleString()"></td>
+                  <td class="p-2 border-r border-slate-200 text-center font-medium">
+                    <span
+                      class="px-2 py-0.5 rounded shadow-sm text-[9px] uppercase tracking-wide bg-white border border-slate-200"
+                      x-text="wave.sortId"></span>
+                  </td>
+                  <td
+                    class="p-2 border-r border-slate-200 text-center truncate max-w-[120px] text-slate-700 font-medium"
+                    x-text="wave.transporter" :title="wave.transporter"></td>
+                  <td class="p-2 border-r border-slate-200 text-center"
+                    :class="wave.ownerGroup === 'DP02' ? 'text-amber-700 font-medium' : 'text-slate-400'"
+                    x-text="wave.ownerGroup === 'DP02' ? getBeanByDay(wave.rawDate) : '-'"></td>
+                  <td class="p-2 border-r border-slate-200 text-center"
+                    :class="(wave.orderType && wave.orderType !== '-') ? 'text-rose-600 font-medium' : 'text-slate-600'"
+                    x-text="(wave.orderType && wave.orderType !== '-') ? wave.orderType : 'Normal'"></td>
+                  <td class="p-2 border-r border-slate-200 text-center font-bold">
+                    <template x-if="wave.isHub">
+                      <div class="text-purple-600 flex flex-col items-center">
+                        <i class="fas fa-map-marker-alt text-[10px] mb-0.5"></i><span class="text-[9px]">HUB</span>
+                      </div>
+                    </template>
+                  </td>
+                  <template x-for="step in wave.steps.filter(s => s.key !== 'truck' && s.key !== 'load')" :key="step.key">
+                    <td class="p-0 border-r border-slate-200 text-center align-top relative group"
+                      :class="step.status === 'done' ? 'bg-[#0aa66c]' : (step.status === 'doing' ? 'bg-blue-500/20' : '')">
+                      <div class="w-full h-full min-h-[70px] flex flex-col items-center justify-center p-1.5 relative">
+                        <button x-show="!isGuest && step.status !== 'pending' && wave.steps[5].status !== 'done'"
+                          @click="checkShiftAndExecute(() => openUndoModal(wave.rowKey, step.key))"
+                          class="absolute top-0.5 right-0.5 opacity-0 group-hover:opacity-100 text-rose-500 hover:text-rose-700 bg-white/90 rounded w-4 h-4 flex items-center justify-center transition-opacity z-10 shadow-sm border border-rose-200">
+                          <i class="fas fa-undo text-[8px]"></i>
+                        </button>
+                        <template x-if="step.status === 'pending'">
+                          <div class="w-full flex flex-col items-center gap-1 px-1">
+                            <div class="text-[9px] font-medium text-slate-500 mb-0.5" x-text="step.slaTimeStr"></div>
+                            <button x-show="!isGuest"
+                              @click="checkShiftAndExecute(() => handleActionClick(wave.rowKey, step.key))"
+                              :disabled="step.isLocked"
+                              class="w-full py-1.5 border rounded-lg text-[10px] font-semibold shadow-sm flex items-center justify-center gap-1.5 transition-colors"
+                              :class="step.isLocked ? 'bg-slate-50 text-slate-300 border-slate-200 cursor-not-allowed' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50 hover:text-blue-600'">
+                              <i class="fas" :class="step.isLocked ? 'fa-lock' : 'fa-play'"></i><span
+                                x-text="step.txtStart"></span>
+                            </button>
+                          </div>
+                        </template>
+                        <template x-if="step.status === 'doing'">
+                          <div class="w-full flex flex-col items-center gap-1 px-1">
+                            <div class="text-[9px] font-semibold text-blue-800 mb-0.5" x-text="step.slaTimeStr"></div>
+                            <button type="button" x-show="!isGuest"
+                              @click.prevent.stop="checkShiftAndExecute(() => openModal('finish', wave.rowKey, step.key))"
+                              class="w-full py-1.5 bg-blue-500 text-white rounded-lg text-[10px] font-semibold shadow-md hover:bg-blue-600 transition-colors animate-pulse flex items-center justify-center gap-1.5">
+                              <i class="fas fa-check"></i>
+                              <span x-text="step.txtFinish"></span>
+                            </button>
+                            <div
+                              class="text-[7px] text-blue-700 font-semibold w-full truncate mt-1 bg-white/50 rounded py-0.5 px-1"
+                              x-text="step.actionUser || 'System'" :title="step.actionUser"></div>
+                          </div>
+                        </template>
+                        <template x-if="step.status === 'done'">
+                          <div class="w-full h-full flex flex-col items-center justify-center relative p-1 gap-1">
+                            <div class="text-white/90 font-medium text-[9px] mb-0.5" x-text="step.slaTimeStr"></div>
+                            <div class="font-bold text-[10px] uppercase tracking-wide text-white drop-shadow-sm"
+                              x-text="step.txtDone"></div>
+                            <div
+                              class="text-white font-medium text-[9px] flex items-center justify-center gap-1.5 bg-black/20 px-2 py-1 rounded-lg shadow-inner w-full whitespace-nowrap overflow-hidden border border-black/10">
+                              <i class="fas fa-check-circle text-white text-[9px]"></i>
+                              <span class="truncate"
+                                x-text="formatStampTime(step.actualDateObj, step.actualTime)"></span>
+                            </div>
+                            <div class="text-[8px] text-white/90 truncate w-full mt-0.5 font-medium"
+                              x-text="step.actionUser" :title="step.actionUser"></div>
+                          </div>
+                        </template>
+                      </div>
+                    </td>
+                  </template>
+                  <td class="p-1.5 border-r border-slate-200 text-center align-middle bg-white">
+                    <div class="flex items-center justify-center gap-1 opacity-30 hover:opacity-100 transition-opacity">
+                      <button x-show="!isGuest" @click="checkShiftAndExecute(() => openEditModal(wave.rowKey))"
+                        class="w-6 h-6 flex items-center justify-center rounded hover:bg-amber-100 text-slate-500 hover:text-amber-600 transition-colors">
+                        <i class="fas fa-pen text-[10px]"></i>
+                      </button>
+                      <button x-show="!isGuest && wave.steps[5].status !== 'done'"
+                        @click="checkShiftAndExecute(() => openUndoGroupModal([wave.rowKey], 'allocate'))"
+                        class="w-6 h-6 flex items-center justify-center rounded hover:bg-blue-100 text-slate-500 hover:text-blue-600 transition-colors"
+                        title="รีเซ็ตทั้งหมด">
+                        <i class="fas fa-history text-[10px]"></i>
+                      </button>
+                      <button x-show="!isGuest" @click="checkShiftAndExecute(() => openCancelWaveModal(wave.id))"
+                        class="w-6 h-6 flex items-center justify-center rounded hover:bg-rose-100 text-slate-500 hover:text-proRed transition-colors">
+                        <i class="fas fa-trash text-[10px]"></i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <div x-show="computedSortedWaves.length > displayLimit"
+            class="flex justify-center py-3 bg-slate-50 border-t border-slate-200 rounded-b-xl">
+            <button @click="displayLimit += 50"
+              class="text-[10px] font-semibold text-blue-600 hover:underline uppercase tracking-widest">
+              แสดงเพิ่ม +50 รายการ <i class="fas fa-chevron-down ml-1"></i>
+            </button>
+          </div>
+        </div>
+
+        <div x-show="!isLoading && filterTab === 'done'" x-cloak
+          class="w-full bg-white border border-slate-200 rounded-xl shadow-sm p-5 mt-2 mb-16">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold text-slate-700 text-sm">
+              <i class="fas fa-check-circle text-emerald-500 mr-1.5"></i>
+              สรุปงานที่เสร็จสิ้นแล้ว
+            </h3>
+            <button @click="exportToExcel('doneSummaryTable', 'Completed_Waves')"
+              class="bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100 px-4 py-1.5 rounded-md text-[10px] font-semibold shadow-sm transition-colors flex items-center gap-1.5 uppercase tracking-wide">
+              <i class="fas fa-file-excel"></i> Export Excel
+            </button>
+          </div>
+          <div class="overflow-x-auto border border-slate-200 rounded-lg relative">
+            <table id="doneSummaryTable" class="w-full text-left border-collapse whitespace-nowrap">
+              <thead
+                class="bg-slate-100 text-slate-600 text-[10px] uppercase font-semibold border-b border-slate-300 sticky top-0 z-10 shadow-sm">
+                <tr>
+                  <th class="p-2 border-r border-slate-200 w-24 text-center">
+                    แผนหยิบ
+                  </th>
+                  <th class="p-2 border-r border-slate-200">Wave ID</th>
+                  <th class="p-2 border-r border-slate-200">Owner</th>
+                  <th class="p-2 border-r border-slate-200">
+                    ขนส่ง (Transporter)
+                  </th>
+                  <th class="p-2 border-r border-slate-200 text-center">
+                    จำนวน (Pcs)
+                  </th>
+                  <th class="p-2 border-r border-slate-200 text-center text-blue-600">
+                    จ่ายงาน
+                  </th>
+                  <th class="p-2 border-r border-slate-200 text-center text-blue-600">
+                    พิมพ์LPN
+                  </th>
+                  <th class="p-2 border-r border-slate-200 text-center text-blue-600">
+                    หยิบ
+                  </th>
+                  <th class="p-2 border-r border-slate-200 text-center text-blue-600">
+                    QC
+                  </th>
+                  <th class="p-2 border-r border-slate-200 text-center text-blue-600">
+                    รถเข้า
+                  </th>
+                  <th class="p-2 text-center text-blue-600">โหลดเสร็จ</th>
+                </tr>
+              </thead>
+              <tbody class="text-[11px] text-slate-700 font-medium">
+                <tr x-show="computedSortedWaves.length === 0">
+                  <td colspan="11" class="text-center py-10 text-slate-400 font-medium bg-slate-50">
+                    ไม่มีข้อมูลงานที่เสร็จสิ้น
+                  </td>
+                </tr>
+                <template x-for="wave in computedSortedWaves.slice(0, displayLimit)" :key="wave.rowKey || wave.id">
+                  <tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                    <td class="p-2 border-r border-slate-200 text-center text-slate-500 font-semibold"
+                      x-text="wave.pickDateDisplay"></td>
+                    <td class="p-2 border-r border-slate-200 font-bold text-blue-700" x-text="wave.id"></td>
+                    <td class="p-2 border-r border-slate-200 font-medium" x-text="wave.ownerGroup"></td>
+                    <td class="p-2 border-r border-slate-200 font-medium" x-text="wave.transporter"></td>
+                    <td class="p-2 border-r border-slate-200 text-center text-emerald-700 font-bold"
+                      x-text="getDisplayTotalPieces(wave).toLocaleString()"></td>
+                    <template x-for="step in wave.steps" :key="step.key">
+                      <td class="p-1.5 border-r border-slate-200 text-center align-middle"
+                        :class="step.isDelay ? 'bg-rose-50/30' : ''">
+                        <div class="flex flex-col items-center justify-center leading-tight">
+                          <span class="text-[8px] font-medium text-slate-400 tracking-wider"
+                            x-text="step.actualDateObj && step.actualDateObj.getFullYear() > 2000 ? step.actualDateObj.toLocaleDateString('th-TH', {day:'numeric', month:'short'}) : '-'"></span>
+                          <span class="text-[11px] font-bold my-0.5"
+                            :class="step.isDelay ? 'text-rose-600' : 'text-slate-700'" x-text="step.actualTime"></span>
+                          <div
+                            class="mt-0.5 bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded text-[8px] font-medium truncate max-w-[70px] shadow-sm border border-blue-100"
+                            :title="step.actionUser" x-text="step.actionUser !== '-' ? step.actionUser : 'System'">
+                          </div>
+                        </div>
+                      </td>
+                    </template>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+          <div x-show="computedSortedWaves.length > displayLimit"
+            class="flex justify-center py-3 bg-slate-50 border-x border-b border-slate-200 rounded-b-xl">
+            <button @click="displayLimit += 50"
+              class="text-[10px] font-semibold text-blue-600 hover:underline uppercase tracking-widest">
+              แสดงเพิ่ม +50 รายการ <i class="fas fa-chevron-down ml-1"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- 🚚 Transporter View (Dock Monitor) -->
+        <div x-show="currentView === 'transporter'" class="flex-1 flex flex-col overflow-y-auto custom-scrollbar pb-32 relative bg-slate-50" id="transporterScrollArea" x-cloak>
+          <div class="px-6 py-4 min-h-full">
+            <div x-show="filterTab === 'all'">
+              <!-- Dock Heatmap -->
+              <div class="flex items-center justify-between mb-2.5 no-print px-1">
+                <div class="text-[11px] font-bold text-slate-600 uppercase tracking-widest flex items-center gap-1.5"><i class="fas fa-door-open text-blue-500"></i> DOCK MONITOR</div>
+                <div class="flex items-center gap-4 text-[9px] font-semibold text-slate-500 uppercase tracking-widest bg-white px-3 py-1 rounded-lg border border-slate-200 shadow-sm">
+                  <span class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-[3px] bg-slate-100 border border-slate-300"></div> ว่าง (Empty)</span>
+                  <span class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-[3px] bg-emerald-50 border-2 border-emerald-400"></div> ปกติ (On-Time)</span>
+                  <span class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-[3px] bg-rose-50 border-2 border-rose-400 animate-pulse"></div> ล่าช้า (Late)</span>
+                </div>
+              </div>
+              <div class="grid grid-cols-13 gap-1.5 mb-5 no-print" style="display: grid; grid-template-columns: repeat(13, minmax(0, 1fr));">
+                <template x-for="i in 13" :key="i">
+                  <div class="flex flex-col min-h-[140px] rounded-xl border transition-all duration-300 shadow-sm overflow-hidden bg-white" :class="getDockWaveObj('Dock ' + String(i).padStart(2,'0')) ? (isDockOverSLA(getDockWaveObj('Dock ' + String(i).padStart(2,'0'))) ? 'border-rose-400 ring-2 ring-rose-100' : 'border-emerald-400 ring-2 ring-emerald-50') : 'border-slate-200 opacity-60'">
+                    <div class="py-1 text-[10px] font-bold text-center uppercase tracking-tighter" :class="getDockWaveObj('Dock ' + String(i).padStart(2,'0')) ? (isDockOverSLA(getDockWaveObj('Dock ' + String(i).padStart(2,'0'))) ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-white') : 'bg-slate-100 text-slate-500'">
+                      <span x-text="'D' + String(i).padStart(2,'0')"></span>
+                    </div>
+                    <div class="flex-1 p-1 flex flex-col justify-between items-center text-center">
+                      <template x-if="getDockWaveObj('Dock ' + String(i).padStart(2,'0'))">
+                        <div class="w-full flex flex-col items-center gap-0.5">
+                          <div class="text-[9px] font-bold text-blue-600 truncate w-full" x-text="getDockWaveInfo('Dock ' + String(i).padStart(2,'0'))"></div>
+                          <template x-if="getDockLicensePlate('Dock ' + String(i).padStart(2,'0'))">
+                            <div class="text-[8px] font-extrabold text-slate-700 bg-slate-100 border border-slate-200 px-1 py-0.5 rounded truncate max-w-full leading-none" x-text="getDockLicensePlate('Dock ' + String(i).padStart(2,'0'))"></div>
+                          </template>
+                          <template x-if="getDockTransporterOrDriver('Dock ' + String(i).padStart(2,'0'))">
+                            <div class="text-[7px] font-medium text-slate-500 truncate w-full leading-none" x-text="getDockTransporterOrDriver('Dock ' + String(i).padStart(2,'0'))" :title="getDockTransporterOrDriver('Dock ' + String(i).padStart(2,'0'))"></div>
+                          </template>
+                          <div class="flex flex-col items-center leading-none mt-0.5">
+                            <span class="text-[7px] font-medium text-slate-400" x-text="getDockWaveObj('Dock ' + String(i).padStart(2,'0')).steps[5].actualDateObj && getDockWaveObj('Dock ' + String(i).padStart(2,'0')).steps[5].actualDateObj.getFullYear() > 2000 ? getDockWaveObj('Dock ' + String(i).padStart(2,'0')).steps[5].actualDateObj.toLocaleDateString('th-TH', {day:'numeric', month:'short'}) : '-'"></span>
+                            <span class="text-[11px] font-bold" :class="isDockOverSLA(getDockWaveObj('Dock ' + String(i).padStart(2,'0'))) ? 'text-rose-600' : 'text-emerald-700'" x-text="getDockElapsedStr(getDockWaveObj('Dock ' + String(i).padStart(2,'0')))"></span>
+                          </div>
+                          <button x-show="!isGuest" @click.stop="quickFinishDockLoad('Dock ' + String(i).padStart(2,'0'))" class="w-full mt-0.5 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white py-1 px-1 rounded text-[8px] font-bold shadow-sm flex items-center justify-center gap-1 transition-all animate-pulse" title="กดจบงานโหลดสินค้านี้"><i class="fas fa-check-double text-[8px]"></i><span>โหลดเสร็จ</span></button>
+                          <div class="mt-0.5 bg-blue-50 text-blue-600 px-1 py-0.5 rounded-[4px] text-[7px] font-medium truncate w-full shadow-sm border border-blue-100" :title="getDockWaveObj('Dock ' + String(i).padStart(2,'0')).steps[5].actionUser" x-text="getDockWaveObj('Dock ' + String(i).padStart(2,'0')).steps[5].actionUser !== '-' ? getDockWaveObj('Dock ' + String(i).padStart(2,'0')).steps[5].actionUser : 'System'"></div>
+                        </div>
+                      </template>
+                      <template x-if="!getDockWaveObj('Dock ' + String(i).padStart(2,'0'))">
+                        <div class="flex flex-col items-center justify-center opacity-20 my-auto"><i class="fas fa-minus text-[10px]"></i><span class="text-[7px] font-bold mt-1 uppercase">Empty</span></div>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+              </div>
+
+              <div class="flex items-center gap-2 mb-4 bg-white p-2 rounded-xl shadow-sm border border-slate-200 overflow-x-auto">
+                <button @click="transporterActiveFilter = 'all'" :class="transporterActiveFilter === 'all' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'" class="px-4 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap">ทั้งหมด</button>
+                <button @click="transporterActiveFilter = 'pending_truck'" :class="transporterActiveFilter === 'pending_truck' ? 'bg-slate-200 text-slate-700 shadow-sm border-slate-300' : 'text-slate-500 hover:bg-slate-50 border-transparent'" class="border px-4 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap"><i class="fas fa-truck text-slate-400 mr-1"></i>รอรถเข้า</button>
+                <button @click="transporterActiveFilter = 'ready_load'" :class="transporterActiveFilter === 'ready_load' ? 'bg-amber-100 text-amber-700 shadow-sm border-amber-200' : 'text-slate-500 hover:bg-slate-50 border-transparent'" class="border px-4 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap"><i class="fas fa-box text-amber-500 mr-1"></i>ของพร้อม/รอโหลด</button>
+                <button @click="transporterActiveFilter = 'wait_load'" :class="transporterActiveFilter === 'wait_load' ? 'bg-blue-100 text-blue-700 shadow-sm border-blue-200' : 'text-slate-500 hover:bg-slate-50 border-transparent'" class="border px-4 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap"><i class="fas fa-truck-loading text-blue-500 mr-1"></i>รถเทียบท่า/รอโหลด</button>
+                <button @click="transporterActiveFilter = 'loading'" :class="transporterActiveFilter === 'loading' ? 'bg-emerald-100 text-emerald-700 shadow-sm border-emerald-200' : 'text-slate-500 hover:bg-slate-50 border-transparent'" class="border px-4 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap"><i class="fas fa-spinner fa-spin text-emerald-500 mr-1"></i>กำลังโหลด</button>
+              </div>
+
+              <div x-show="computedFilteredGroupedTransporterWaves.length === 0" class="text-center py-20 bg-white rounded-xl border border-slate-200 shadow-sm mt-2">
+                <i class="fas fa-truck-slash text-4xl text-slate-300 mb-3 block"></i><p class="text-xs font-semibold text-slate-400">ไม่พบข้อมูลรถขนส่งในสถานะที่เลือก</p>
+              </div>
+
+              <div x-show="computedFilteredGroupedTransporterWaves.length > 0" class="w-full overflow-x-auto overflow-y-auto max-h-[75vh] custom-scrollbar bg-white shadow-sm border border-slate-300 mt-2 rounded-xl">
+                <table class="w-full border-collapse text-left whitespace-nowrap min-w-[1400px] ops-table">
+                  <thead class="bg-slate-100 text-slate-600 text-[10px] text-center border-b-2 border-slate-300 shadow-sm sticky top-0 z-10 font-semibold">
+                    <tr>
+                      <th class="p-2 border-r border-slate-300 w-24">แผนวันที่หยิบ</th>
+                      <th class="p-2 border-r border-slate-300 w-28">แผนเวลาโหลด</th>
+                      <th class="p-2 border-r border-slate-300 w-16 text-blue-600">Trip</th>
+                      <th class="p-2 border-r border-slate-300 w-16">Owner</th>
+                      <th class="p-2 border-r border-slate-300 w-28">ขนส่ง (Transporter)</th>
+                      <th class="p-2 border-r border-slate-300 w-20">ประเภทรถ</th>
+                      <th class="p-2 border-r border-slate-300 w-24">ทะเบียนรถ</th>
+                      <th class="p-2 border-r border-slate-300 w-24">Booking No.</th>
+                      <th class="p-2 border-r border-slate-300 w-20">ประเภท</th>
+                      <th class="p-2 border-r border-slate-300 w-40">รายการWave</th>
+                      <th class="p-2 border-r border-slate-300 w-24 text-slate-500"><i class="fas fa-history"></i> ประวัติแก้ไขเวลา</th>
+                      <th class="p-2 border-r border-slate-300 w-24">1. หยิบรวม</th>
+                      <th class="p-2 border-r border-slate-300 w-24">2. QC รวม</th>
+                      <th class="p-2 border-r border-slate-300 w-28 text-blue-600 font-bold">3. รับรถเข้า</th>
+                      <th class="p-2 w-32 text-amber-600 font-bold">4. จัดการโหลด</th>
+                      <th class="p-2 w-10 text-slate-400"><i class="fas fa-cog"></i></th>
+                    </tr>
+                  </thead>
+                  <tbody class="text-[11px] text-slate-700 font-medium">
+                    <template x-for="(group, index) in computedFilteredGroupedTransporterWaves.slice(0, transporterLimit)" :key="group.displayId">
+                      <tr class="border-b border-slate-200 transition-colors hover:bg-blue-50/70" :class="(getDockAlert(group) && getDockAlert(group).level === 'red') ? '!bg-rose-100' : ((getDockAlert(group) && getDockAlert(group).level === 'amber') ? '!bg-amber-100' : ((isTruckAlert(group) && group.steps.truck.status === 'pending') ? '!bg-rose-50' : (index % 2 === 0 ? 'bg-white' : 'bg-slate-50')))">
+                        <td class="p-2 border-r border-slate-200 text-center font-medium text-slate-500" x-text="group.waves[0].pickDateDisplay"></td>
+                        <td class="p-2 border-r border-slate-200 text-center font-bold bg-slate-50/50">
+                          <div class="text-blue-700 text-xs" x-text="group.waves[0].targetTimeStr.split('|')[1] ? group.waves[0].targetTimeStr.split('|')[1].trim() : group.waves[0].targetTimeStr"></div>
+                          <div class="text-slate-600 text-xs mt-0.5" x-text="group.waves[0].targetTimeStr.split('|')[0] ? group.waves[0].targetTimeStr.split('|')[0].trim() : ''"></div>
+                        </td>
+                        <td class="p-2 border-r border-slate-200 text-center font-bold text-blue-600 bg-blue-50/30 text-base" x-text="group.waves[0].tripNo"></td>
+                        <td class="p-0 border-r border-slate-200 text-center font-bold" :class="group.waves[0].ownerGroup === 'DM02' ? 'bg-emerald-100 text-emerald-800' : (group.waves[0].ownerGroup === 'DP02' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600')">
+                          <div class="w-full h-full min-h-[50px] flex items-center justify-center text-[10px]" x-text="group.waves[0].ownerGroup"></div>
+                        </td>
+                        <td class="p-2 border-r border-slate-200 text-center font-bold text-slate-800" x-text="group.transporter"></td>
+                        <td class="p-2 border-r border-slate-200 text-center">
+                          <span class="bg-slate-800 text-white px-2 py-1 rounded text-[9px] font-bold tracking-widest shadow-sm" x-text="group.vehicleType"></span>
+                          <div x-show="isTruckAlert(group) && group.steps.truck.status !== 'done'" class="mt-1 text-[8px] font-bold text-rose-500 bg-rose-100 rounded px-1 py-0.5 animate-pulse"><i class="fas fa-exclamation-triangle"></i> LATE</div>
+                          <template x-if="getDockAlert(group)">
+                            <div class="mt-1 text-[9px] font-extrabold rounded-md px-1.5 py-1 animate-pulse leading-tight shadow-md ring-1 flex items-center gap-1 justify-center" :class="getDockAlert(group).level === 'red' ? 'text-white bg-rose-600 ring-rose-300' : 'text-white bg-amber-500 ring-amber-300'"><i class="fas fa-triangle-exclamation"></i> <span x-text="getDockAlert(group).text"></span></div>
+                          </template>
+                        </td>
+                        <td class="p-2 border-r border-slate-200 text-center font-medium text-slate-700" x-text="group.waves[0].steps[5].licensePlate || '-'"></td>
+                        <td class="p-2 border-r border-slate-200 text-center font-medium text-slate-600" x-text="group.bookingNo"></td>
+                        <td class="p-2 border-r border-slate-200 text-center" :class="(group.waves[0].orderType && group.waves[0].orderType !== '-') ? 'text-rose-600 font-semibold' : 'text-slate-600'" x-text="(group.waves[0].orderType && group.waves[0].orderType !== '-') ? group.waves[0].orderType : 'Normal'"></td>
+                        <td class="p-2 border-r border-slate-200 text-center">
+                          <div class="flex flex-wrap gap-1 justify-center max-h-[56px] overflow-y-auto custom-scrollbar px-1">
+                            <template x-for="waveId in group.ids" :key="waveId"><span class="bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded text-[8px] font-semibold shadow-sm cursor-pointer hover:bg-blue-100 transition-colors" @click="scrollToWave(waveId)" x-text="standardizeWaveId(waveId)"></span></template>
+                          </div>
+                        </td>
+                        <td class="p-1 border-r border-slate-200 text-center align-middle bg-slate-50/50">
+                          <template x-if="group.timeChangeCount === 0"><span class="text-[10px] text-slate-300 font-medium">-</span></template>
+                          <template x-if="group.timeChangeCount > 0">
+                            <div class="flex flex-col items-center justify-center gap-1">
+                              <span class="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-[9px] font-bold border border-amber-200 shadow-sm flex items-center gap-1"><i class="fas fa-history"></i> เลื่อน<span x-text="group.timeChangeCount"></span>ครั้ง</span><span class="text-[7px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">อัปเดตโดยขนส่ง</span>
+                            </div>
+                          </template>
+                        </td>
+                        <template x-for="stepKey in ['pick', 'qc']" :key="stepKey">
+                          <td class="p-0 border-r border-slate-200 text-center align-top relative group" :class="group.steps[stepKey].status === 'done' ? 'bg-[#0aa66c]' : (group.steps[stepKey].status === 'doing' ? 'bg-blue-50/40' : '')">
+                            <div class="w-full h-full min-h-[70px] flex flex-col items-center justify-center p-1.5 relative">
+                              <template x-if="group.steps[stepKey].status === 'pending'">
+                                <div class="w-full flex flex-col items-center gap-0.5">
+                                  <div class="text-[9px] font-medium text-slate-500" x-text="group.steps[stepKey].slaTimeStr"></div>
+                                  <span class="text-slate-400 text-[10px] font-medium"><i class="fas fa-clock mb-1 block"></i>รอทำ</span>
+                                </div>
+                              </template>
+                              <template x-if="group.steps[stepKey].status === 'doing'">
+                                <div class="w-full flex flex-col items-center gap-0.5">
+                                  <div class="text-[9px] font-semibold text-blue-800" x-text="group.steps[stepKey].slaTimeStr"></div>
+                                  <span class="text-blue-600 text-[10px] font-bold animate-pulse"><i class="fas fa-spinner fa-spin mb-1 block"></i>กำลังทำ</span>
+                                </div>
+                              </template>
+                              <template x-if="group.steps[stepKey].status === 'done'">
+                                <div class="w-full h-full flex flex-col items-center justify-center relative p-1 gap-1">
+                                  <div class="text-white/90 font-medium text-[9px] mb-0.5" x-text="group.steps[stepKey].slaTimeStr"></div>
+                                  <div class="text-white font-medium text-[9px] flex items-center justify-center gap-1.5 bg-black/20 px-2 py-1 rounded-lg shadow-inner w-full whitespace-nowrap overflow-hidden border border-black/10">
+                                    <i class="fas fa-check-circle text-white text-[10px]"></i>
+                                    <span class="truncate" x-text="formatStampTime(group.steps[stepKey].actualDateObj, group.steps[stepKey].actualTime)"></span>
+                                  </div>
+                                  <div class="text-[8px] text-white/90 truncate w-full mt-0.5 font-bold uppercase tracking-widest">เสร็จสิ้น</div>
+                                </div>
+                              </template>
+                            </div>
+                          </td>
+                        </template>
+                        <td class="p-1.5 border-r border-slate-200 text-center align-middle relative w-28 group" :class="group.steps.truck.status === 'done' ? 'bg-[#0aa66c]' : ''">
+                          <div class="w-full h-full min-h-[70px] flex flex-col items-center justify-center relative">
+                            <button x-show="!isGuest && group.steps.truck.status !== 'pending' && group.steps.load.status !== 'done'" @click="checkShiftAndExecute(() => openUndoGroupModal(group.waves.map(w => w.rowKey), 'truck'))" class="absolute top-0.5 right-0.5 opacity-0 group-hover:opacity-100 text-rose-500 hover:text-rose-700 bg-white/90 rounded w-4 h-4 flex items-center justify-center transition-opacity z-10 shadow-sm border border-rose-200" title="ย้อนสถานะรับรถเข้า"><i class="fas fa-undo text-[8px]"></i></button>
+                            <template x-if="group.steps.truck.status !== 'done'">
+                              <div class="w-full px-1.5 flex flex-col items-center gap-1">
+                                <div class="text-[9px] font-medium text-slate-500" x-text="group.steps.truck.slaTimeStr"></div>
+                                <button x-show="!isGuest" @click="quickFinishGroupTruck(group.waves.map(w => w.rowKey))" class="w-full bg-white border py-1.5 rounded-lg text-[9px] font-semibold hover:bg-blue-50 transition-colors shadow-sm active:scale-95 flex items-center justify-center gap-1.5" :class="group.steps.truck.status === 'doing' ? 'text-amber-600 border-amber-300' : 'text-blue-600 border-blue-300'">
+                                  <i class="fas fa-truck-loading"></i><span x-text="group.steps.truck.status === 'doing' ? 'เช็คอินรถ (ต่อ)' : 'เช็คอินรถ'"></span>
+                                </button>
+                              </div>
+                            </template>
+                            <template x-if="group.steps.truck.status === 'done'">
+                              <div class="w-full flex flex-col items-center justify-center p-1 gap-1">
+                                <div class="text-white/90 font-medium text-[9px] mb-0.5" x-text="group.steps.truck.slaTimeStr"></div>
+                                <div class="text-white font-medium text-[9px] flex items-center justify-center gap-1.5 bg-black/20 px-2 py-1 rounded-lg shadow-inner w-full whitespace-nowrap overflow-hidden border border-black/10">
+                                  <i class="fas fa-check-circle text-white text-[10px]"></i><span class="truncate" x-text="formatStampTime(group.steps.truck.actualDateObj, group.steps.truck.actualTime)"></span>
+                                </div>
+                                <div class="text-[8px] text-white/90 truncate w-full mt-0.5 font-medium" :title="group.steps.truck.actionUser" x-text="group.steps.truck.actionUser !== '-' ? group.steps.truck.actionUser : 'System'"></div>
+                              </div>
+                            </template>
+                          </div>
+                        </td>
+                        <td class="p-1.5 text-center align-middle relative w-32 group" :class="group.steps.load.status === 'done' ? 'bg-[#0aa66c]' : (group.steps.load.status === 'doing' ? 'bg-amber-50/50' : '')">
+                          <div class="w-full h-full min-h-[70px] flex flex-col items-center justify-center relative">
+                            <button x-show="!isGuest && group.steps.load.status !== 'pending'" @click="checkShiftAndExecute(() => openUndoGroupModal(group.waves.map(w => w.rowKey), 'load'))" class="absolute top-0.5 right-0.5 opacity-0 group-hover:opacity-100 text-rose-500 hover:text-rose-700 bg-white/90 rounded w-4 h-4 flex items-center justify-center transition-opacity z-10 shadow-sm border border-rose-200" title="ย้อนสถานะจัดการโหลด"><i class="fas fa-undo text-[8px]"></i></button>
+                            <template x-if="group.steps.load.status === 'pending'">
+                              <div class="w-full px-1.5 flex flex-col items-center gap-1">
+                                <div class="text-[9px] font-medium text-slate-500" x-text="group.steps.load.slaTimeStr"></div>
+                                <button x-show="!isGuest && group.steps.truck.status === 'done'" @click="openGroupModal('start', group.waves.map(w => w.rowKey), 'load')" class="w-full bg-amber-500 text-white py-1.5 rounded-lg text-[9px] font-semibold hover:bg-amber-600 transition-colors shadow-sm active:scale-95 flex items-center justify-center gap-1.5"><i class="fas fa-play"></i> เริ่มโหลด</button>
+                                <span x-show="isGuest || group.steps.truck.status !== 'done'" class="text-slate-400 text-[9px] font-medium"><i class="fas fa-clock mb-1 block"></i>รอโหลด</span>
+                              </div>
+                            </template>
+                            <template x-if="group.steps.load.status === 'doing'">
+                              <div class="w-full px-1.5 flex flex-col items-center gap-1">
+                                <div class="text-[9px] font-semibold text-blue-800" x-text="group.steps.load.slaTimeStr"></div>
+                                <button x-show="!isGuest" @click="quickFinishGroupLoad(group.waves.map(w => w.rowKey))" class="w-full bg-emerald-500 text-white py-1.5 rounded-lg text-[9px] font-semibold hover:bg-emerald-600 transition-colors shadow-sm active:scale-95 flex items-center justify-center gap-1.5 animate-pulse"><i class="fas fa-check-double"></i> โหลดเสร็จ</button>
+                                <div class="text-[8px] text-amber-700 font-semibold w-full truncate bg-white/80 rounded py-0.5 px-1 shadow-sm border border-amber-200 text-center" :title="group.steps.load.actionUser" x-text="group.steps.load.actionUser !== '-' ? group.steps.load.actionUser : 'System'"></div>
+                                <div x-show="group.steps.load.dockInfo" class="text-[8px] font-medium text-white bg-black/20 px-1.5 py-0.5 rounded border border-black/10 flex justify-center items-center gap-1"><i class="fas fa-door-open"></i><span x-text="group.steps.load.dockInfo"></span></div>
+                              </div>
+                            </template>
+                            <template x-if="group.steps.load.status === 'done'">
+                              <div class="w-full flex flex-col items-center justify-center p-1 gap-1">
+                                <div class="text-white/90 font-medium text-[9px] mb-0.5" x-text="group.steps.load.slaTimeStr"></div>
+                                <div class="text-white font-medium text-[9px] flex items-center justify-center gap-1.5 bg-black/20 px-2 py-1 rounded-lg shadow-inner w-full whitespace-nowrap overflow-hidden border border-black/10"><i class="fas fa-check-circle text-white text-[10px]"></i><span class="truncate" x-text="formatStampTime(group.steps.load.actualDateObj, group.steps.load.actualTime)"></span></div>
+                                <div class="text-[8px] text-white/90 truncate w-full mt-0.5 font-medium" :title="group.steps.load.actionUser" x-text="group.steps.load.actionUser !== '-' ? group.steps.load.actionUser : 'System'"></div>
+                                <div x-show="group.steps.load.dockInfo" class="mt-0.5 text-[8px] font-medium text-white bg-black/20 px-1.5 py-0.5 rounded border border-black/10 flex justify-center items-center gap-1"><i class="fas fa-door-open"></i><span x-text="group.steps.load.dockInfo"></span></div>
+                              </div>
+                            </template>
+                          </div>
+                        </td>
+                        <td class="p-1.5 border-l border-slate-200 text-center align-middle bg-white">
+                          <button x-show="!isGuest" @click="checkShiftAndExecute(() => openEditModal(group.waves.map(w => w.rowKey)))" class="w-6 h-6 mx-auto flex items-center justify-center rounded hover:bg-amber-100 text-slate-500 hover:text-amber-600 transition-colors" title="แก้ไขข้อมูลรถและเวลาโหลด"><i class="fas fa-pen text-[10px]"></i></button>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+                <div x-show="computedFilteredGroupedTransporterWaves.length > transporterLimit" class="flex justify-center py-3 bg-slate-50 border-t border-slate-200 rounded-b-xl mt-[-10px]">
+                  <button @click="transporterLimit += 30" class="text-[10px] font-semibold text-blue-600 hover:underline uppercase tracking-widest">แสดงเพิ่ม +30 รายการ <i class="fas fa-chevron-down ml-1"></i></button>
+                </div>
+              </div>
+            </div>
+            <div x-show="!isLoading && filterTab === 'done'" x-cloak class="w-full bg-white border border-slate-200 rounded-xl shadow-sm p-5 mt-2 mb-16">
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold text-slate-700 text-sm"><i class="fas fa-check-circle text-emerald-500 mr-1.5"></i> สรุปงานรถเข้าและโหลดเสร็จสิ้นแล้ว</h3>
+                <button @click="exportToExcel('transporterDoneTable', 'Transporter_Completed_Waves')" class="bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100 px-4 py-1.5 rounded-md text-[10px] font-semibold shadow-sm transition-colors flex items-center gap-1.5 uppercase tracking-wide"><i class="fas fa-file-excel"></i> Export Excel</button>
+              </div>
+              <div class="overflow-x-auto border border-slate-200 rounded-lg relative">
+                <table id="transporterDoneTable" class="w-full text-left border-collapse whitespace-nowrap min-w-[1200px] table-fixed">
+                  <thead class="bg-slate-100 text-slate-600 text-[10px] uppercase font-semibold border-b border-slate-300 sticky top-0 z-10 shadow-sm text-center">
+                    <tr>
+                      <th class="p-2 border-r border-slate-200" style="width: 100px">แผนวันที่/เวลา</th>
+                      <th class="p-2 border-r border-slate-200 text-blue-700 bg-blue-50/50" style="width: 130px">Booking No.</th>
+                      <th class="p-2 border-r border-slate-200" style="width: 80px">Owner</th>
+                      <th class="p-2 border-r border-slate-200" style="width: 150px">ขนส่ง (Transporter)</th>
+                      <th class="p-2 border-r border-slate-200" style="width: 120px">ประเภท/ทะเบียน</th>
+                      <th class="p-2 border-r border-slate-200" style="width: 200px; min-width: 200px; max-width: 200px">รายการ Wave</th>
+                      <th class="p-2 border-r border-slate-200 text-blue-600" style="width: 85px">1. หยิบรวม</th>
+                      <th class="p-2 border-r border-slate-200 text-blue-600" style="width: 85px">2. QC รวม</th>
+                      <th class="p-2 border-r border-slate-200 text-blue-600" style="width: 85px">3. รับรถเข้า</th>
+                      <th class="p-2 text-blue-600" style="width: 85px">4. โหลดเสร็จ</th>
+                    </tr>
+                  </thead>
+                  <tbody class="text-[11px] text-slate-700 font-medium">
+                    <tr x-show="computedFilteredGroupedTransporterWaves.length === 0"><td colspan="10" class="text-center py-10 text-slate-400 font-medium bg-slate-50">ไม่มีข้อมูลรถที่เสร็จสิ้น</td></tr>
+                    <template x-for="(group, index) in computedFilteredGroupedTransporterWaves.slice(0, transporterLimit)" :key="group.displayId">
+                      <tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                        <td class="p-2 border-r border-slate-200 text-center">
+                          <div class="font-semibold text-slate-600" x-text="group.waves[0].pickDateDisplay"></div>
+                          <div class="text-blue-600 text-[10px] font-bold" x-text="group.waves[0].targetTimeStr.split('|')[1] ? group.waves[0].targetTimeStr.split('|')[1].trim() : group.waves[0].targetTimeStr"></div>
+                        </td>
+                        <td class="p-2 border-r border-slate-200 text-center font-bold text-blue-700 bg-blue-50/30 text-sm" x-text="group.bookingNo"></td>
+                        <td class="p-2 border-r border-slate-200 text-center font-medium" x-text="group.waves[0].ownerGroup"></td>
+                        <td class="p-2 border-r border-slate-200 text-center font-bold text-slate-800" x-text="group.transporter"></td>
+                        <td class="p-2 border-r border-slate-200 text-center">
+                          <div class="font-bold text-slate-700" x-text="group.vehicleType"></div>
+                          <div class="text-[9px] text-slate-500" x-text="group.waves[0].steps[5].licensePlate || '-'"></div>
+                        </td>
+                        <td class="p-1 border-r border-slate-200 align-top" style="width: 200px; min-width: 200px; max-width: 200px">
+                          <div class="grid grid-cols-3 gap-1 p-1 max-h-[85px] overflow-y-auto custom-scrollbar">
+                            <template x-for="waveId in group.ids" :key="waveId"><span class="bg-slate-100 text-slate-500 border border-slate-200 px-1 py-0.5 rounded-[4px] text-[8px] font-semibold shadow-xs text-center truncate" x-text="standardizeWaveId(waveId)"></span></template>
+                          </div>
+                        </td>
+                        <template x-for="stepKey in ['pick', 'qc', 'truck', 'load']" :key="stepKey">
+                          <td class="p-1.5 border-r border-slate-200 text-center align-middle">
+                            <div class="flex flex-col items-center justify-center leading-tight">
+                              <span class="text-[8px] font-medium text-slate-400 tracking-wider" x-text="group.steps[stepKey].actualDateObj && group.steps[stepKey].actualDateObj.getFullYear() > 2000 ? group.steps[stepKey].actualDateObj.toLocaleDateString('th-TH', {day:'numeric', month:'short'}) : '-'"></span>
+                              <span class="text-[11px] font-bold my-0.5 text-slate-700" x-text="group.steps[stepKey].actualTime"></span>
+                              <div class="mt-0.5 bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded text-[8px] font-medium truncate max-w-[70px]" :title="group.steps[stepKey].actionUser" x-text="group.steps[stepKey].actionUser !== '-' ? group.steps[stepKey].actionUser : 'System'"></div>
+                            </div>
+                          </td>
+                        </template>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+              <div x-show="computedFilteredGroupedTransporterWaves.length > transporterLimit" class="flex justify-center py-3 bg-slate-50 border-x border-b border-slate-200 rounded-b-xl">
+                <button @click="transporterLimit += 30" class="text-[10px] font-semibold text-blue-600 hover:underline uppercase tracking-widest">แสดงเพิ่ม +30 รายการ <i class="fas fa-chevron-down ml-1"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- 📊 Executive Dashboard View -->
+    <div x-show="currentView === 'dashboard' || currentView === 'exec'" x-cloak
+      class="flex-1 flex flex-col p-6 gap-6 bg-slate-100 overflow-y-auto pb-32 custom-scrollbar"
+      id="dashboardScrollArea">
+      <div class="flex justify-between items-end flex-shrink-0 border-b border-slate-300 pb-3">
+        <div>
+          <h2 class="text-2xl font-bold text-slate-800 tracking-tight uppercase flex items-center gap-2">
+            <i class="fas fa-chart-pie text-blue-600"></i> Executive Dashboard
+          </h2>
+          <p class="text-xs font-medium text-slate-500 uppercase tracking-widest mt-1">
+            ภาพรวมประสิทธิภาพคลังสินค้าและการขนส่ง (DC & TRANSPORT
+            PERFORMANCE)
+          </p>
+        </div>
+      </div>
+
+      <!-- 🔵 ตัวกรองช่วงเวลา Dashboard: ปุ่มเลือก + ปฏิทิน -->
+      <div class="flex flex-wrap items-center gap-2 flex-shrink-0 -mt-2">
+        <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mr-1">
+          <i class="fas fa-clock-rotate-left text-blue-500 mr-1"></i>ช่วงเวลา
+        </span>
+        <template x-for="opt in [{v:'3',t:'3 เดือน'},{v:'6',t:'6 เดือน'},{v:'12',t:'12 เดือน'},{v:'all',t:'ทั้งหมด'}]" :key="opt.v">
+          <button @click="dashStart=''; dashEnd=''; dashPeriod=opt.v; applyDashboardFilter()"
+            :class="(dashPeriod === opt.v && !dashStart && !dashEnd) ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'"
+            class="h-8 px-3 rounded-lg text-[10px] font-semibold transition-all active:scale-95"
+            x-text="opt.t"></button>
+        </template>
+        <div class="flex items-center gap-1.5 ml-1 bg-white border border-slate-300 rounded-lg px-2 h-8">
+          <i class="fas fa-calendar-days text-slate-400 text-[10px]"></i>
+          <input type="date" x-model="dashStart" @change="applyDashboardFilter()"
+            class="text-[10px] text-slate-600 bg-transparent outline-none w-[110px]" />
+          <span class="text-slate-300 text-[10px]">—</span>
+          <input type="date" x-model="dashEnd" @change="applyDashboardFilter()"
+            class="text-[10px] text-slate-600 bg-transparent outline-none w-[110px]" />
+          <button x-show="dashStart || dashEnd" @click="dashStart=''; dashEnd=''; applyDashboardFilter()"
+            class="text-rose-400 hover:text-rose-600 text-[10px] ml-0.5" title="ล้างช่วงวันที่">
+            <i class="fas fa-xmark"></i>
+          </button>
+        </div>
+        <span class="text-[9px] font-medium text-slate-400 ml-auto" x-show="!dashStart && !dashEnd"
+          x-text="'* แสดงย้อนหลัง ' + (dashPeriod === 'all' ? 'ทั้งหมด' : dashPeriod + ' เดือน') + ' • ช่วงข้อมูล ' + (analytics.dataRangeText || '-') + ' (' + (analytics.total ? analytics.total.toLocaleString() : 0) + ' เที่ยว)'"></span>
+        <span class="text-[9px] font-medium text-blue-500 ml-auto" x-show="dashStart || dashEnd"
+          x-text="'* ช่วงที่เลือก: ' + (analytics.dataRangeText || '-') + ' (' + (analytics.total ? analytics.total.toLocaleString() : 0) + ' เที่ยว)'"></span>
+      </div>
+
+      <!-- KPI Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-5 flex-shrink-0">
+        <div class="rounded-2xl p-5 border-l-4 border-l-slate-800 flex flex-col justify-center bg-white shadow-sm border-y border-r border-slate-200/60 h-28">
+          <p class="text-[11px] font-semibold uppercase text-slate-400 tracking-widest">รวมงานทั้งหมด (WAVES)</p>
+          <p class="text-3xl font-bold text-slate-800 mt-1" x-text="analytics.total.toLocaleString()"></p>
+        </div>
+        <div class="rounded-2xl p-5 border-l-4 border-l-emerald-500 flex flex-col justify-center bg-white shadow-sm border-y border-r border-slate-200/60 h-28">
+          <p class="text-[11px] font-semibold uppercase text-emerald-500 tracking-widest">DC ON-TIME</p>
+          <p class="text-3xl font-bold text-slate-800 mt-1" x-text="analytics.total === 0 ? '-' : (analytics.dcOntimePercent + '%')"></p>
+        </div>
+        <div class="rounded-2xl p-5 border-l-4 border-l-blue-500 flex flex-col justify-center bg-white shadow-sm border-y border-r border-slate-200/60 h-28">
+          <p class="text-[11px] font-semibold uppercase text-blue-500 tracking-widest">CARRIER ON-TIME</p>
+          <p class="text-3xl font-bold text-slate-800 mt-1" x-text="analytics.total === 0 ? '-' : (analytics.tpOntimePercent + '%')"></p>
+        </div>
+        <div class="rounded-2xl p-5 bg-gradient-to-br from-rose-500 to-rose-700 shadow-md flex flex-col justify-center text-white h-28">
+          <p class="text-[11px] font-semibold uppercase text-white/80 tracking-widest">ยอดปรับล่าช้า (PENALTY)</p>
+          <p class="text-3xl font-bold text-white mt-1" x-text="analytics.totalPenaltyCost.toLocaleString() + ' ฿'"></p>
+        </div>
+      </div>
+
+      <div class="flex flex-col gap-4 mt-2">
+        <h2 class="text-sm font-bold text-slate-800 border-b border-slate-200 pb-2 uppercase tracking-wide flex items-center gap-2">
+          <i class="fas fa-warehouse text-blue-600 bg-blue-50 p-1.5 rounded-lg"></i>
+          1. สรุปประสิทธิภาพศูนย์กระจายสินค้า (DC PERFORMANCE)
+        </h2>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 flex-shrink-0 items-stretch">
+          <div class="rounded-2xl p-5 lg:col-span-2 flex flex-col h-[340px] bg-white shadow-sm border border-slate-200/60">
+            <h3 class="text-xs font-bold text-slate-800 mb-4 uppercase tracking-widest flex items-center gap-2 flex-shrink-0">
+              <i class="fas fa-chart-area text-blue-500"></i> แนวโน้ม ON-TIME (ย้อนหลัง 7 วัน)
+            </h3>
+            <div class="flex-1 w-full relative min-h-0">
+              <canvas id="performanceChart"></canvas>
+            </div>
+          </div>
+          <div class="rounded-2xl p-5 flex flex-col justify-center gap-4 h-[340px] bg-white shadow-sm border border-slate-200/60">
+            <h3 class="text-xs font-bold text-slate-800 uppercase tracking-widest flex items-center gap-2 mb-2 flex-shrink-0">
+              <i class="fas fa-chart-pie text-blue-500"></i> ภาพรวม PICK & QC
+            </h3>
+            <div class="bg-slate-50/70 rounded-xl p-4 border border-slate-100 flex flex-col items-center justify-center flex-1">
+              <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">PICK ON-TIME</p>
+              <p class="text-5xl font-bold" :class="analytics.pickOntimePercent === '-' ? 'text-slate-300' : (parseInt(analytics.pickOntimePercent) >= 90 ? 'text-emerald-500' : 'text-rose-500')" x-text="analytics.pickOntimePercent"></p>
+            </div>
+            <div class="bg-slate-50/70 rounded-xl p-4 border border-slate-100 flex flex-col items-center justify-center flex-1">
+              <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">QC ON-TIME</p>
+              <p class="text-5xl font-bold" :class="analytics.qcOntimePercent === '-' ? 'text-slate-300' : (parseInt(analytics.qcOntimePercent) >= 90 ? 'text-emerald-500' : 'text-rose-500')" x-text="analytics.qcOntimePercent"></p>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-2xl p-5 relative flex flex-col bg-white shadow-sm border border-slate-200/60 w-full overflow-hidden h-[340px]">
+          <h3 class="text-[11px] font-bold text-slate-800 mb-4 uppercase tracking-widest flex items-center gap-2 flex-shrink-0">
+            <i class="fas fa-clock text-blue-500 bg-blue-50 p-1.5 rounded-lg"></i>
+            สรุปประสิทธิภาพรายวันและกะ (Daily Shift Performance)
+          </h3>
+          <button @click="exportToExcel('shiftTable', 'Shift_Performance')" class="absolute top-4 right-5 text-emerald-600 hover:bg-emerald-50 px-2 py-1.5 rounded-lg flex items-center justify-center transition-all text-[11px] font-bold uppercase tracking-wider">
+            <i class="fas fa-file-excel mr-1"></i> Export
+          </button>
+          <div class="flex-1 overflow-y-auto custom-scrollbar border border-slate-100 rounded-lg bg-white min-h-0">
+            <table id="shiftTable" class="w-full text-left border-collapse compact-table">
+              <thead class="sticky top-0 bg-slate-800 text-white z-10 border-b-2 border-slate-900 shadow-sm">
+                <tr>
+                  <th rowspan="2" class="border-r border-slate-700 uppercase w-28 align-middle text-center font-semibold text-[10px] p-2">วันที่แผนหยิบ</th>
+                  <th rowspan="2" class="border-r border-slate-700 uppercase text-center w-20 align-middle font-semibold text-[10px] p-2 bg-slate-700/50">รวมงาน</th>
+                  <th colspan="3" class="border-r border-slate-700 text-amber-400 uppercase text-center font-semibold text-[10px] p-2 bg-slate-900/40"><i class="fas fa-sun mr-1"></i> กะเช้า</th>
+                  <th colspan="3" class="text-indigo-400 uppercase text-center font-semibold text-[10px] p-2 bg-slate-900/60"><i class="fas fa-moon mr-1"></i> กะดึก</th>
+                </tr>
+                <tr>
+                  <th class="border-r border-t border-slate-700 text-slate-300 text-center w-16 font-medium text-[9px] p-1 bg-slate-900/40">งาน</th>
+                  <th class="border-r border-t border-slate-700 text-slate-300 text-center font-medium text-[9px] p-1 bg-slate-900/40">Pick On-Time</th>
+                  <th class="border-r border-t border-slate-700 text-slate-300 text-center font-medium text-[9px] p-1 bg-slate-900/40">QC On-Time</th>
+                  <th class="border-r border-t border-slate-700 text-slate-300 text-center w-16 font-medium text-[9px] p-1 bg-slate-900/60">งาน</th>
+                  <th class="border-r border-t border-slate-700 text-slate-300 text-center font-medium text-[9px] p-1 bg-slate-900/60">Pick On-Time</th>
+                  <th class="border-t border-slate-700 text-slate-300 text-center font-medium text-[9px] p-1 bg-slate-900/60">QC On-Time</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <template x-for="dayData in analytics.datesFormatted" :key="dayData.date">
+                  <tr class="hover:bg-slate-50 transition-colors">
+                    <td class="p-2 font-medium text-slate-600 text-center text-[10px]" x-text="dayData.date"></td>
+                    <td class="p-2 font-bold text-slate-800 text-center bg-slate-50 text-[10px]" x-text="(dayData.morning.total==='-'?0:parseInt(dayData.morning.total)) + (dayData.night.total==='-'?0:parseInt(dayData.night.total))"></td>
+                    <td class="p-2 font-medium text-slate-600 text-center text-[10px]" x-text="dayData.morning.total"></td>
+                    <td class="p-2 font-bold text-center text-[10px]" :class="dayData.morning.pickOntimeNum === null ? 'text-slate-400' : (dayData.morning.pickOntimeNum >= 90 ? 'text-emerald-600' : 'text-rose-600')" x-text="dayData.morning.pickOntimePercent"></td>
+                    <td class="p-2 font-bold text-center text-[10px]" :class="dayData.morning.qcOntimeNum === null ? 'text-slate-400' : (dayData.morning.qcOntimeNum >= 90 ? 'text-emerald-600' : 'text-rose-600')" x-text="dayData.morning.qcOntimePercent"></td>
+                    <td class="p-2 font-medium text-slate-600 text-center text-[10px] bg-slate-50/50" x-text="dayData.night.total"></td>
+                    <td class="p-2 font-bold text-center text-[10px] bg-slate-50/50" :class="dayData.night.pickOntimeNum === null ? 'text-slate-400' : (dayData.night.pickOntimeNum >= 90 ? 'text-emerald-600' : 'text-rose-600')" x-text="dayData.night.pickOntimePercent"></td>
+                    <td class="p-2 font-bold text-center text-[10px] bg-slate-50/50" :class="dayData.night.qcOntimeNum === null ? 'text-slate-400' : (dayData.night.qcOntimeNum >= 90 ? 'text-emerald-600' : 'text-rose-600')" x-text="dayData.night.qcOntimePercent"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 🟢 กราฟปริมาณงานจ่ายลงสายพาน (Hourly Allocation) พร้อมตาราง Heatmap แบบกระชับ -->
+      <div class="rounded-2xl p-5 relative flex flex-col bg-white shadow-sm border border-slate-200/60 w-full mt-4">
+        
+        <!-- Header & Filters -->
+        <div class="flex flex-wrap items-center justify-between mb-4 gap-2 border-b border-slate-100 pb-3">
+          <h3 class="text-[12px] font-bold text-slate-800 uppercase tracking-widest flex items-center gap-2">
+            <i class="fas fa-boxes text-indigo-500 bg-indigo-50 p-1.5 rounded-lg"></i>
+            ปริมาณงานจ่ายลงสายพานรายชั่วโมง (Hourly Allocated Volume)
+          </h3>
+          <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2 h-8 shadow-sm">
+              <i class="fas fa-calendar-alt text-slate-400 text-[10px]"></i>
+              <input type="date" x-model="hourlyFilter.date" @change="updateHourlyChart()" class="text-[10px] font-bold text-slate-600 bg-transparent outline-none w-[110px]" />
+            </div>
+            <select x-model="hourlyFilter.owner" @change="updateHourlyChart()" class="bg-slate-50 border border-slate-200 rounded-lg px-2 h-8 text-[10px] font-bold outline-none text-slate-700 shadow-sm cursor-pointer">
+              <option value="all">ทุกทีม (All Owners)</option>
+              <option value="DM02">เฉพาะ DM02</option>
+              <option value="DP02">เฉพาะ DP02</option>
+              <option value="Other">เฉพาะ Other</option>
+            </select>
+          </div>
+        </div>
+        
+        <!-- Canvas กราฟ -->
+        <div class="w-full relative h-[240px]">
+          <canvas id="hourlyAllocChart"></canvas>
+        </div>
+        
+        <!-- ตารางข้อมูลด้านล่าง (ไม่มี Scrollbar โชว์ตัวเลขเรียง 24 ชม.) -->
+        <div class="mt-3 pt-3 w-full">
+          <table class="w-full text-center border-collapse table-fixed">
+            <thead class="border-b-2 border-slate-100">
+              <tr>
+                <th class="py-1 text-slate-500 uppercase w-12 text-[9px] font-bold text-left pl-2">ทีม</th>
+                <template x-for="h in execAnalytics.hourlyAlloc" :key="'th'+h.hour">
+                  <th class="py-1 text-slate-400 font-semibold text-[8px] text-center" x-text="h.hour.split(':')[0]"></th>
+                </template>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- แถว DM02 -->
+              <tr x-show="hourlyFilter.owner === 'all' || hourlyFilter.owner === 'DM02'" class="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                <td class="py-1 font-bold text-blue-500 text-[9px] text-left pl-2 border-r border-slate-100">DM02</td>
+                <template x-for="h in execAnalytics.hourlyAlloc" :key="'dm'+h.hour">
+                  <td class="p-[1px]">
+                    <div class="w-full py-0.5 text-[8px] font-medium rounded-[3px] transition-colors"
+                         :class="h.dm02 > (settings.maxLimits.DM02 || 0) ? 'bg-rose-500 text-white font-bold shadow-sm' : 'text-slate-500'"
+                         x-text="h.dm02 > 0 ? (h.dm02 >= 1000 ? (h.dm02/1000).toFixed(1)+'k' : h.dm02) : '-'"
+                         :title="h.dm02.toLocaleString() + ' ชิ้น'"></div>
+                  </td>
+                </template>
+              </tr>
+              <!-- แถว DP02 -->
+              <tr x-show="hourlyFilter.owner === 'all' || hourlyFilter.owner === 'DP02'" class="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                <td class="py-1 font-bold text-amber-500 text-[9px] text-left pl-2 border-r border-slate-100">DP02</td>
+                <template x-for="h in execAnalytics.hourlyAlloc" :key="'dp'+h.hour">
+                  <td class="p-[1px]">
+                    <div class="w-full py-0.5 text-[8px] font-medium rounded-[3px] transition-colors"
+                         :class="h.dp02 > (settings.maxLimits.DP02 || 0) ? 'bg-rose-500 text-white font-bold shadow-sm' : 'text-slate-500'"
+                         x-text="h.dp02 > 0 ? (h.dp02 >= 1000 ? (h.dp02/1000).toFixed(1)+'k' : h.dp02) : '-'"
+                         :title="h.dp02.toLocaleString() + ' ชิ้น'"></div>
+                  </td>
+                </template>
+              </tr>
+              <!-- แถว Other -->
+              <tr x-show="hourlyFilter.owner === 'all' || hourlyFilter.owner === 'Other'" class="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                <td class="py-1 font-bold text-slate-400 text-[9px] text-left pl-2 border-r border-slate-100">Other</td>
+                <template x-for="h in execAnalytics.hourlyAlloc" :key="'oth'+h.hour">
+                  <td class="p-[1px]">
+                    <div class="w-full py-0.5 text-[8px] font-medium rounded-[3px] transition-colors"
+                         :class="h.other > (settings.maxLimits.Other || 0) ? 'bg-rose-500 text-white font-bold shadow-sm' : 'text-slate-400'"
+                         x-text="h.other > 0 ? (h.other >= 1000 ? (h.other/1000).toFixed(1)+'k' : h.other) : '-'"
+                         :title="h.other.toLocaleString() + ' ชิ้น'"></div>
+                  </td>
+                </template>
+              </tr>
+              <!-- แถวรวมทั้งหมด -->
+              <tr x-show="hourlyFilter.owner === 'all'" class="bg-slate-50/50">
+                <td class="py-1 font-bold text-slate-700 text-[9px] text-left pl-2 border-r border-slate-100">Total</td>
+                <template x-for="h in execAnalytics.hourlyAlloc" :key="'tot'+h.hour">
+                  <td class="p-[1px]">
+                    <div class="w-full py-0.5 text-[8px] transition-colors"
+                         :class="h.total > ((settings.maxLimits.DM02||0) + (settings.maxLimits.DP02||0) + (settings.maxLimits.Other||0)) ? 'bg-rose-500 text-white font-bold shadow-sm rounded-[3px]' : 'text-slate-600 font-bold'"
+                         x-text="h.total > 0 ? (h.total >= 1000 ? (h.total/1000).toFixed(1)+'k' : h.total) : '-'"
+                         :title="h.total.toLocaleString() + ' ชิ้น'"></div>
+                  </td>
+                </template>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="flex flex-col gap-4 mt-4">
+        <h2 class="text-sm font-bold text-slate-800 border-b border-slate-200 pb-2 uppercase tracking-wide flex items-center gap-2">
+          <i class="fas fa-truck text-emerald-600 bg-emerald-50 p-1.5 rounded-lg"></i>
+          2. สรุปประสิทธิภาพการขนส่ง (Transporter Performance)
+        </h2>
+
+        <!-- 🟢 2.1 ตารางผลงานขนส่งแบบมี Progress Bar (กระชับและเพรียวบาง) -->
+        <div class="grid grid-cols-1 gap-4 flex-shrink-0 items-stretch mt-1">
+          <div class="rounded-xl p-0 relative flex flex-col bg-white shadow-sm border border-slate-200/60 overflow-hidden">
+            <div class="p-3 px-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <h3 class="text-xs font-bold text-slate-800 uppercase tracking-widest flex items-center gap-2 m-0">
+                <i class="fas fa-truck-fast text-emerald-500"></i>
+                CARRIER PERFORMANCE OVERVIEW
+              </h3>
+              <button @click="exportToExcel('transporterTable', 'Transporter_Performance')"
+                class="text-emerald-600 hover:bg-emerald-50 px-2 py-1 rounded-md flex items-center justify-center transition-all text-[10px] font-bold uppercase tracking-wider border border-emerald-200 bg-white shadow-sm">
+                <i class="fas fa-file-excel mr-1"></i> Export
+              </button>
+            </div>
+            <div class="flex-1 overflow-x-auto custom-scrollbar bg-white">
+              <table id="transporterTable" class="w-full text-left border-collapse min-w-[700px] compact-table dash-table">
+                <thead class="bg-slate-100/80 text-slate-500 text-[10px] uppercase font-bold tracking-wider border-b border-slate-200">
+                  <tr>
+                    <th class="py-2 px-5 border-r border-slate-200/50">บริษัทขนส่ง (TRANSPORTER)</th>
+                    <th class="py-2 px-5 text-center w-24 border-r border-slate-200/50">คิว (ORDERS)</th>
+                    <th class="py-2 px-5 w-72 border-r border-slate-200/50">รถเข้า ON-TIME % (TRUCK)</th>
+                    <th class="py-2 px-5 w-72">โหลด ON-TIME % (LOAD)</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-slate-700">
+                  <template x-for="tp in transporterPerformance" :key="tp.name">
+                    <tr class="hover:bg-blue-50/50 transition-colors group">
+                      <td class="py-2 px-5 font-bold text-slate-800 whitespace-nowrap border-r border-slate-100 group-hover:border-blue-100" x-text="tp.name"></td>
+                      <td class="py-2 px-5 text-center font-bold text-slate-600 bg-slate-50/30 border-r border-slate-100 group-hover:bg-blue-50/50 group-hover:border-blue-100" x-text="tp.total"></td>
+                      
+                      <!-- แถบสี รถเข้า On-Time -->
+                      <td class="py-2 px-5 border-r border-slate-100 group-hover:border-blue-100">
+                        <div class="flex items-center justify-between gap-3">
+                          <div class="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden flex-1 shadow-inner">
+                            <div class="h-full rounded-full transition-all duration-700 ease-out"
+                                 :class="tp.truckPercent === '-' ? 'bg-slate-300' : (tp.truckPercent >= 98 ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' : 'bg-gradient-to-r from-rose-400 to-rose-500')"
+                                 :style="`width: ${tp.truckPercent === '-' ? 0 : tp.truckPercent}%`"></div>
+                          </div>
+                          <span class="font-bold w-10 text-right text-[11px]"
+                                :class="tp.truckPercent === '-' ? 'text-slate-400' : (tp.truckPercent >= 98 ? 'text-slate-700' : 'text-rose-600')"
+                                x-text="tp.truckPercent === '-' ? '-' : tp.truckPercent + '%'"></span>
+                        </div>
+                      </td>
+                      
+                      <!-- แถบสี โหลด On-Time -->
+                      <td class="py-2 px-5">
+                        <div class="flex items-center justify-between gap-3">
+                          <div class="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden flex-1 shadow-inner">
+                            <div class="h-full rounded-full transition-all duration-700 ease-out"
+                                 :class="tp.loadPercent === '-' ? 'bg-slate-300' : (tp.loadPercent >= 98 ? 'bg-gradient-to-r from-blue-400 to-blue-500' : 'bg-gradient-to-r from-rose-400 to-rose-500')"
+                                 :style="`width: ${tp.loadPercent === '-' ? 0 : tp.loadPercent}%`"></div>
+                          </div>
+                          <span class="font-bold w-10 text-right text-[11px]"
+                                :class="tp.loadPercent === '-' ? 'text-slate-400' : (tp.loadPercent >= 98 ? 'text-slate-700' : 'text-rose-600')"
+                                x-text="tp.loadPercent === '-' ? '-' : tp.loadPercent + '%'"></span>
+                        </div>
+                      </td>
+                    </tr>
+                  </template>
+                  <tr x-show="!transporterPerformance || transporterPerformance.length === 0">
+                    <td colspan="4" class="p-6 text-center text-slate-400 font-medium bg-slate-50">ไม่มีข้อมูลผลงานขนส่งในช่วงเวลานี้</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 🟢 2.2 ตารางขนส่งรายวัน & ประเภทรถ -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 flex-shrink-0 items-stretch mt-4">
+          <div class="rounded-2xl p-5 relative flex flex-col h-[480px] bg-white shadow-sm border border-slate-200/60">
+            <h3 class="text-[11px] font-bold text-slate-800 mb-4 uppercase tracking-widest flex items-center gap-2 flex-shrink-0">
+              <i class="fas fa-calendar-day text-indigo-500 bg-indigo-50 p-1.5 rounded-lg"></i>
+              สรุปผลงานขนส่งรายวัน
+            </h3>
+            <button @click="exportToExcel('tpDailyTable', 'Daily_Transporter_Performance')" class="absolute top-4 right-5 text-emerald-600 hover:bg-emerald-50 px-2 py-1.5 rounded-lg flex items-center justify-center transition-all text-[11px] font-bold uppercase tracking-wider"><i class="fas fa-file-excel"></i></button>
+            <div class="flex-1 overflow-y-auto custom-scrollbar border border-slate-100 rounded-lg bg-white min-h-0">
+              <table id="tpDailyTable" class="w-full text-left border-collapse compact-table dash-table">
+                <thead class="sticky top-0 bg-slate-50 z-10 border-b border-slate-200 shadow-sm">
+                  <tr>
+                    <th class="p-2 text-slate-500 font-semibold uppercase text-[9px] tracking-wider">วันที่</th>
+                    <th class="p-2 text-slate-500 font-semibold uppercase text-[9px] tracking-wider text-center w-12">คิว</th>
+                    <th class="p-2 text-slate-500 font-semibold uppercase text-[9px] tracking-wider text-center w-16">เข้า On-Time</th>
+                    <th class="p-2 text-slate-500 font-semibold uppercase text-[9px] tracking-wider text-center w-16">โหลด On-Time</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  <template x-for="td in execAnalytics.tpDaily" :key="td.date">
+                    <tr class="hover:bg-slate-50 transition-colors">
+                      <td class="p-2 font-medium text-slate-600 text-[10px]" x-text="td.date"></td>
+                      <td class="p-2 font-bold text-slate-800 text-center bg-slate-50/50 text-[10px]" x-text="td.total"></td>
+                      <td class="p-2 font-bold text-center text-[10px]" :class="td.truckPercent === '-' ? 'text-slate-400' : (td.truckPercent >= 90 ? 'text-emerald-600' : 'text-rose-600')" x-text="td.truckPercent === '-' ? '-' : td.truckPercent + '%'"></td>
+                      <td class="p-2 font-bold text-center text-[10px]" :class="td.loadPercent === '-' ? 'text-slate-400' : (td.loadPercent >= 90 ? 'text-emerald-600' : 'text-rose-600')" x-text="td.loadPercent === '-' ? '-' : td.loadPercent + '%'"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="rounded-2xl p-5 relative flex flex-col h-[480px] bg-white shadow-sm border border-slate-200/60">
+            <h3 class="text-xs font-bold text-slate-800 mb-4 uppercase tracking-widest flex items-center gap-2 flex-shrink-0">
+              <i class="fas fa-truck-pickup text-blue-500 bg-blue-50 p-1.5 rounded-lg"></i>
+              ประสิทธิภาพตามประเภทรถ
+            </h3>
+            <button @click="exportToExcel('vehicleTable', 'VehicleType_Performance')" class="absolute top-4 right-5 text-emerald-600 hover:bg-emerald-50 px-2 py-1.5 rounded-lg flex items-center justify-center transition-all text-[11px] font-bold uppercase tracking-wider"><i class="fas fa-file-excel"></i></button>
+            <div class="flex-1 overflow-y-auto custom-scrollbar border border-slate-100 rounded-lg bg-white min-h-0">
+              <table id="vehicleTable" class="w-full text-left border-collapse compact-table dash-table">
+                <thead class="sticky top-0 bg-slate-50 z-10 border-b border-slate-200 shadow-sm">
+                  <tr>
+                    <th class="p-2 text-slate-500 font-semibold uppercase text-[9px] tracking-wider">ประเภทรถ</th>
+                    <th class="p-2 text-slate-500 font-semibold uppercase text-[9px] tracking-wider text-center w-12">คิว</th>
+                    <th class="p-2 text-slate-500 font-semibold uppercase text-[9px] tracking-wider text-center w-16">เข้าOn-Time</th>
+                    <th class="p-2 text-slate-500 font-semibold uppercase text-[9px] tracking-wider text-center w-16">โหลด On-Time</th>
+                    <th class="p-2 text-slate-500 font-semibold uppercase text-[9px] tracking-wider text-center w-20">เวลาโหลด<br />เฉลี่ย (น.)</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  <template x-for="vp in vehiclePerformance" :key="vp.name">
+                    <tr class="hover:bg-slate-50 transition-colors">
+                      <td class="p-2 font-medium text-slate-600 uppercase text-[10px]" x-text="vp.name"></td>
+                      <td class="p-2 font-bold text-slate-800 text-center bg-slate-50/50 text-[10px]" x-text="vp.total"></td>
+                      <td class="p-2 font-bold text-center text-[10px]" :class="vp.truckPercent === '-' ? 'text-slate-400' : (vp.truckPercent >= 90 ? 'text-emerald-600' : 'text-rose-600')" x-text="vp.truckPercent === '-' ? '-' : vp.truckPercent + '%'"></td>
+                      <td class="p-2 font-bold text-center text-[10px]" :class="vp.loadPercent === '-' ? 'text-slate-400' : (vp.loadPercent >= 90 ? 'text-emerald-600' : 'text-rose-600')" x-text="vp.loadPercent === '-' ? '-' : vp.loadPercent + '%'"></td>
+                      <td class="p-2 font-bold text-center text-[10px]" :class="vp.avgLoadMins === '-' ? 'text-slate-400' : 'text-slate-700'" :title="vp.avgLoadMins === '-' ? 'ไม่มีข้อมูลเวลาโหลดที่ถูกต้อง (นับเฉพาะ 10 นาที–4 ชม.)' : ('เฉลี่ยจาก ' + vp.loadSamples + ' เที่ยว')" x-text="vp.avgLoadMins === '-' ? '-' : (vp.avgLoadMins + ' น.')"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 🟢 2.3 Dock Utilization Heatmap -->
+        <div class="rounded-2xl p-5 relative flex flex-col bg-white shadow-sm border border-slate-200/60 mt-4 w-full">
+          <div class="flex items-center justify-between mb-4 flex-shrink-0 flex-wrap gap-2">
+            <h3 class="text-[11px] font-bold text-slate-800 uppercase tracking-widest flex items-center gap-2">
+              <i class="fas fa-th text-amber-500 bg-amber-50 p-1.5 rounded-lg"></i>
+              Dock Utilization Heatmap
+              <span class="text-[9px] font-medium text-slate-400 normal-case tracking-normal" x-text="'นับรถที่โหลดเสร็จ • ท่า × ชั่วโมง • ข้อมูล ' + (analytics.dataRangeText || '-') + ' (' + (analytics.total ? analytics.total.toLocaleString() : 0) + ' เที่ยว)'"></span>
+            </h3>
+            <div class="flex items-center gap-1.5 text-[9px] font-medium text-slate-500">
+              <span>น้อย</span>
+              <span class="inline-block w-4 h-3 rounded-sm bg-slate-100 border border-slate-200"></span>
+              <span class="inline-block w-4 h-3 rounded-sm bg-emerald-300"></span>
+              <span class="inline-block w-4 h-3 rounded-sm bg-amber-300"></span>
+              <span class="inline-block w-4 h-3 rounded-sm bg-orange-400"></span>
+              <span class="inline-block w-4 h-3 rounded-sm bg-rose-500"></span>
+              <span>มาก</span>
+            </div>
+          </div>
+          <div class="w-full overflow-hidden">
+            <table class="w-full text-center border-collapse table-fixed">
+              <thead class="border-b-2 border-slate-100">
+                <tr>
+                  <th class="py-1.5 text-slate-500 uppercase w-10 text-[9px] font-bold text-left pl-1">Dock</th>
+                  <template x-for="h in heatmapData.hours" :key="'hh_' + h">
+                    <th class="py-1.5 text-slate-400 font-semibold text-[8px] text-center" x-text="String(h).padStart(2, '0')"></th>
+                  </template>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="row in heatmapData.data" :key="row.dock">
+                  <tr class="hover:bg-slate-50/50 transition-colors border-b border-slate-50 last:border-0">
+                    <td class="py-1 font-bold text-slate-600 text-[9px] text-left pl-1 border-r border-slate-100" x-text="row.dock"></td>
+                    <template x-for="cell in row.hours" :key="cell.id">
+                      <td class="p-[2px]">
+                        <div class="flex items-center justify-center font-bold transition-all w-full h-[16px] rounded-[3px] text-[8px] cursor-default"
+                          :class="cell.css" x-text="cell.text" :title="cell.title"></div>
+                      </td>
+                    </template>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      
+      <div class="flex flex-col gap-4 mt-4">
+        <h2 class="text-sm font-bold text-slate-800 border-b border-slate-200 pb-2 uppercase tracking-wide flex items-center gap-2">
+          <i class="fas fa-chart-line text-indigo-600 bg-indigo-50 p-1.5 rounded-lg"></i>
+          3. วิเคราะห์แนวโน้ม (Weekly & Monthly Trends)
+        </h2>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch mt-1">
+          <div class="rounded-2xl p-5 flex flex-col h-[320px] bg-white shadow-sm border border-slate-200/60">
+            <h3 class="text-[11px] font-bold text-slate-800 mb-4 uppercase tracking-widest flex items-center gap-2 flex-shrink-0">
+              <i class="fas fa-chart-line text-blue-500"></i> แนวโน้มประสิทธิภาพ DC (10 สัปดาห์ล่าสุด)
+            </h3>
+            <div class="flex-1 w-full relative min-h-0"><canvas id="execDcChart"></canvas></div>
+          </div>
+          <div class="rounded-2xl p-5 flex flex-col h-[320px] bg-white shadow-sm border border-slate-200/60">
+            <h3 class="text-[11px] font-bold text-slate-800 mb-4 uppercase tracking-widest flex items-center gap-2 flex-shrink-0">
+              <i class="fas fa-chart-bar text-emerald-500"></i> แนวโน้มประสิทธิภาพการขนส่ง (10 สัปดาห์ล่าสุด)
+            </h3>
+            <div class="flex-1 w-full relative min-h-0"><canvas id="execTpChart"></canvas></div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch mt-5">
+          <div class="rounded-2xl p-5 relative flex flex-col min-h-[340px] bg-white shadow-sm border border-slate-200/60">
+            <h3 class="text-[11px] font-bold text-slate-800 mb-4 uppercase tracking-widest flex items-center gap-2 flex-shrink-0">
+              <i class="fas fa-calendar-week text-indigo-500"></i> สรุปผลงานรายสัปดาห์
+            </h3>
+            <button @click="exportToExcel('execWeeklyTable', 'Weekly_Summary')" class="absolute top-4 right-5 text-emerald-600 hover:bg-emerald-50 px-2 py-1.5 rounded-lg flex items-center justify-center transition-all text-[11px] font-bold uppercase tracking-wider"><i class="fas fa-file-excel mr-1"></i> Export</button>
+            <div class="flex-1 overflow-y-auto custom-scrollbar border border-slate-100 rounded-lg bg-white min-h-0">
+              <table id="execWeeklyTable" class="w-full text-left border-collapse compact-table">
+                <thead class="sticky top-0 bg-slate-800 text-white z-10 border-b-2 border-slate-900 shadow-sm">
+                  <tr>
+                    <th rowspan="2" class="border-r border-slate-700 font-semibold uppercase w-16 align-middle text-center text-[10px] p-2">สัปดาห์</th>
+                    <th rowspan="2" class="border-r border-slate-700 font-semibold uppercase text-center w-12 align-middle text-[10px] p-2 bg-slate-700/50">งาน</th>
+                    <th colspan="2" class="border-r border-slate-700 text-blue-400 font-semibold uppercase text-center text-[10px] p-2 bg-slate-900/40">DC Perf.</th>
+                    <th colspan="2" class="border-r border-slate-700 text-emerald-400 font-semibold uppercase text-center text-[10px] p-2 bg-slate-900/60">Transport Perf.</th>
+                    <th rowspan="2" class="text-rose-400 font-semibold uppercase text-center w-20 align-middle text-[10px] p-2">ค่าปรับ (฿)</th>
+                  </tr>
+                  <tr>
+                    <th class="border-r border-t border-slate-700 font-medium text-center text-[9px] p-1 text-slate-300 bg-slate-900/40">Pick</th>
+                    <th class="border-r border-t border-slate-700 font-medium text-center text-[9px] p-1 text-slate-300 bg-slate-900/40">QC</th>
+                    <th class="border-r border-t border-slate-700 font-medium text-center text-[9px] p-1 text-slate-300 bg-slate-900/60">Truck</th>
+                    <th class="border-t border-slate-700 font-medium text-center text-[9px] p-1 text-slate-300 bg-slate-900/60">Load</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-slate-100">
+                  <template x-for="week in execAnalytics.weekly" :key="week.key">
+                    <tr class="hover:bg-slate-50 transition-colors">
+                      <td class="p-2 font-bold text-slate-700 text-center text-[10px]" x-text="week.key"></td>
+                      <td class="p-2 font-bold text-slate-600 text-center bg-slate-50 text-[10px]"><span x-text="week.total.toLocaleString()"></span></td>
+                      <td class="p-2 font-bold text-center text-[10px]" :class="week.pickOnTime === '-' ? 'text-slate-400' : (week.pickOnTime >= 90 ? 'text-emerald-600' : 'text-rose-600')" x-text="week.pickOnTime === '-' ? '-' : week.pickOnTime + '%'"></td>
+                      <td class="p-2 font-bold text-center text-[10px]" :class="week.qcOnTime === '-' ? 'text-slate-400' : (week.qcOnTime >= 90 ? 'text-emerald-600' : 'text-rose-600')" x-text="week.qcOnTime === '-' ? '-' : week.qcOnTime + '%'"></td>
+                      <td class="p-2 font-bold text-center text-[10px] bg-slate-50/50" :class="week.truckOnTime === '-' ? 'text-slate-400' : (week.truckOnTime >= 90 ? 'text-emerald-600' : 'text-rose-600')" x-text="week.truckOnTime === '-' ? '-' : week.truckOnTime + '%'"></td>
+                      <td class="p-2 font-bold text-center text-[10px] bg-slate-50/50" :class="week.loadOnTime === '-' ? 'text-slate-400' : (week.loadOnTime >= 90 ? 'text-emerald-600' : 'text-rose-600')" x-text="week.loadOnTime === '-' ? '-' : week.loadOnTime + '%'"></td>
+                      <td class="p-2 font-bold text-right pr-4 text-[10px]" :class="week.penalty > 0 ? 'text-rose-600' : 'text-slate-400'"><span x-text="week.penalty.toLocaleString()"></span></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="rounded-2xl p-5 relative flex flex-col h-[340px] bg-white shadow-sm border border-slate-200/60">
+            <h3 class="text-[11px] font-bold text-slate-800 mb-4 uppercase tracking-widest flex items-center gap-2 flex-shrink-0">
+              <i class="fas fa-calendar-alt text-amber-500"></i> สรุปผลงานรายเดือน
+            </h3>
+            <button @click="exportToExcel('execMonthlyTable', 'Monthly_Summary')" class="absolute top-4 right-5 text-emerald-600 hover:bg-emerald-50 px-2 py-1.5 rounded-lg flex items-center justify-center transition-all text-[11px] font-bold uppercase tracking-wider"><i class="fas fa-file-excel mr-1"></i> Export</button>
+            <div class="flex-1 overflow-y-auto custom-scrollbar border border-slate-100 rounded-lg bg-white min-h-0">
+              <table id="execMonthlyTable" class="w-full text-left border-collapse compact-table">
+                <thead class="sticky top-0 bg-slate-800 text-white z-10 border-b-2 border-slate-900 shadow-sm">
+                  <tr>
+                    <th rowspan="2" class="border-r border-slate-700 font-semibold uppercase w-16 align-middle text-center text-[10px] p-2">เดือน</th>
+                    <th rowspan="2" class="border-r border-slate-700 font-semibold uppercase text-center w-12 align-middle text-[10px] p-2 bg-slate-700/50">งาน</th>
+                    <th colspan="2" class="border-r border-slate-700 text-blue-400 font-semibold uppercase text-center text-[10px] p-2 bg-slate-900/40">DC Perf.</th>
+                    <th colspan="2" class="border-r border-slate-700 text-emerald-400 font-semibold uppercase text-center text-[10px] p-2 bg-slate-900/60">Transport Perf.</th>
+                    <th rowspan="2" class="text-rose-400 font-semibold uppercase text-center w-20 align-middle text-[10px] p-2">ค่าปรับ (฿)</th>
+                  </tr>
+                  <tr>
+                    <th class="border-r border-t border-slate-700 font-medium text-center text-[9px] p-1 text-slate-300 bg-slate-900/40">Pick</th>
+                    <th class="border-r border-t border-slate-700 font-medium text-center text-[9px] p-1 text-slate-300 bg-slate-900/40">QC</th>
+                    <th class="border-r border-t border-slate-700 font-medium text-center text-[9px] p-1 text-slate-300 bg-slate-900/60">Truck</th>
+                    <th class="border-t border-slate-700 font-medium text-center text-[9px] p-1 text-slate-300 bg-slate-900/60">Load</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-slate-100">
+                  <template x-for="month in execAnalytics.monthly" :key="month.key">
+                    <tr class="hover:bg-slate-50 transition-colors">
+                      <td class="p-2 font-bold text-slate-700 text-center text-[10px]" x-text="month.key"></td>
+                      <td class="p-2 font-bold text-slate-600 text-center bg-slate-50 text-[10px]"><span x-text="month.total.toLocaleString()"></span></td>
+                      <td class="p-2 font-bold text-center text-[10px]" :class="month.pickOnTime === '-' ? 'text-slate-400' : (month.pickOnTime >= 90 ? 'text-emerald-600' : 'text-rose-600')" x-text="month.pickOnTime === '-' ? '-' : month.pickOnTime + '%'"></td>
+                      <td class="p-2 font-bold text-center text-[10px]" :class="month.qcOnTime === '-' ? 'text-slate-400' : (month.qcOnTime >= 90 ? 'text-emerald-600' : 'text-rose-600')" x-text="month.qcOnTime === '-' ? '-' : month.qcOnTime + '%'"></td>
+                      <td class="p-2 font-bold text-center text-[10px] bg-slate-50/50" :class="month.truckOnTime === '-' ? 'text-slate-400' : (month.truckOnTime >= 90 ? 'text-emerald-600' : 'text-rose-600')" x-text="month.truckOnTime === '-' ? '-' : month.truckOnTime + '%'"></td>
+                      <td class="p-2 font-bold text-center text-[10px] bg-slate-50/50" :class="month.loadOnTime === '-' ? 'text-slate-400' : (month.loadOnTime >= 90 ? 'text-emerald-600' : 'text-rose-600')" x-text="month.loadOnTime === '-' ? '-' : month.loadOnTime + '%'"></td>
+                      <td class="p-2 font-bold text-right pr-4 text-[10px]" :class="month.penalty > 0 ? 'text-rose-600' : 'text-slate-400'"><span x-text="month.penalty.toLocaleString()"></span></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- 📦 Integrated Pro-Scanner View -->
     <div x-show="currentView === 'combineWeb'" x-data="{ 
           iframeLoading: true, 
           scannerUrl: 'https://pro-warehouse.github.io/pro-scanner/',
