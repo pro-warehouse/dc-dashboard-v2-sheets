@@ -2509,9 +2509,22 @@
                 w.sortId = 'Sort' + String(sortCounter).padStart(2, '0');
                 sortCounter = sortCounter >= 8 ? 1 : sortCounter + 1;
               });
+              // 🟢 1. ระบบ Auto-Clear: กรองเก็บข้อมูลไว้เฉพาะ 7 วันล่าสุด (Rolling 7 Days)
+              const cutoffDate = new Date();
+              cutoffDate.setDate(cutoffDate.getDate() - 6); // ถอยหลัง 6 วัน (รวมวันนี้ = 7 วันพอดี)
+              cutoffDate.setHours(0, 0, 0, 0);
+
+              this.waves = this.waves.filter((w) => w.rawDate >= cutoffDate);
+              
+              // 🟢 2. อัปเดต Filter ขนส่ง
               this.uniqueTransporters = [...new Set(this.waves.map((w) => w.transporter))].sort();
               if (this.uniqueTransporters.length === 0) this.filterTransporters = [...this.uniqueTransporters];
-              this.uniquePickDates = [...new Set(this.waves.map((w) => w.pickDateDisplay))].sort().reverse();
+              
+              // 🟢 3. อัปเดตและเรียงลำดับ Filter วันที่ให้ถูกต้องตามปฏิทิน
+              const uniqueDatesMap = {};
+              this.waves.forEach(w => { uniqueDatesMap[w.pickDateDisplay] = w.rawDate.getTime(); });
+              this.uniquePickDates = Object.keys(uniqueDatesMap).sort((a, b) => uniqueDatesMap[b] - uniqueDatesMap[a]);
+
               this.waves = [...this.waves];
               this.refreshDataViews();
 
