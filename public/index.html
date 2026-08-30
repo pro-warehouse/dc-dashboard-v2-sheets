@@ -2407,12 +2407,25 @@
         getDisplayTotalPieces(wave) {
           if (!wave) return 0;
           const wmsStatus = String(wave.wmsStatus || '').toUpperCase();
+          
           if (wmsStatus.includes('SHIP COMPLETED') || wmsStatus.includes('PICK COMPLETED')) return 0;
-          const totalQ = this.parseNumericQty(wave.wmsTotalQty);
-          const allocQ = this.parseNumericQty(wave.wmsAllocatedQty);
-          const fallbackQ = this.parseNumericQty(wave.totalPieces);
-          if (wmsStatus.includes('WAVE CREATED') || wmsStatus.includes('NEW') || wmsStatus.includes('CREATED')) return totalQ > 0 ? totalQ : fallbackQ;
-          if (wmsStatus.includes('ALLOCATED') || wmsStatus.includes('PICKING')) return allocQ > 0 ? allocQ : (totalQ > 0 ? totalQ : fallbackQ);
+          
+          let totalQ = this.parseNumericQty(wave.wmsTotalQty);
+          let allocQ = this.parseNumericQty(wave.wmsAllocatedQty);
+          let fallbackQ = this.parseNumericQty(wave.totalPieces);
+          
+          // 🟢 สำคัญ: ถ้า WMS Total Qty เป็น 0 ให้ดึง Total Pieces (Fallback) มาใช้แทนชั่วคราว ป้องกันเลข 0
+          if (totalQ === 0 && fallbackQ > 0) totalQ = fallbackQ;
+          
+          // 🟢 ถ้าสถานะเพิ่งสร้าง (WAVE CREATED) ให้โชว์ยอด Total Qty ทันที
+          if (wmsStatus.includes('WAVE CREATED') || wmsStatus.includes('NEW') || wmsStatus.includes('CREATED') || wmsStatus === '') {
+             return totalQ > 0 ? totalQ : fallbackQ;
+          }
+          
+          if (wmsStatus.includes('ALLOCATED') || wmsStatus.includes('PICKING')) {
+             return allocQ > 0 ? allocQ : (totalQ > 0 ? totalQ : fallbackQ);
+          }
+          
           return fallbackQ > 0 ? fallbackQ : (totalQ > 0 ? totalQ : 0);
         },
 
@@ -2661,15 +2674,23 @@
           const row = group.firstRow;
           const vBook = this.getVal(row, ['Vehicle_Booking_No']);
           const waveKey = group.rowKey || `${group.id}_${group.booking || vBook || '-'}`;
-          const serverWmsStatus = this.getVal(row, ['WMS_204_Status', 'WMS_Status']);
+         const serverWmsStatus = this.getVal(row, ['WMS_204_Status', 'WMS_Status']);
           const serverWmsAllocatedQty = this.getVal(row, ['WMS_204_Allocated_Qty', 'WMS_Allocated_Qty', 'Allocated_Qty']);
-          const serverWmsTotalQty = this.getVal(row, ['WMS_204_Total_Qty', 'WMS_Total_Qty']);
+          // 🟢 เพิ่มการดึง Total_Qty ธรรมดาเข้าไปด้วย เผื่อ WMS_Total_Qty ขาดหาย
+          const serverWmsTotalQty = this.getVal(row, ['WMS_204_Total_Qty', 'WMS_Total_Qty', 'Total_Qty']); 
           const serverWmsDisplayQty = this.getVal(row, ['WMS_204_Display_Qty', 'WMS_Display_Qty']);
-          const wmsStatus = serverWmsStatus || '';
-          const wmsAllocatedQty = serverWmsAllocatedQty !== null && serverWmsAllocatedQty !== undefined ? this.parseNumericQty(serverWmsAllocatedQty) : null;
-          const wmsTotalQty = serverWmsTotalQty !== null && serverWmsTotalQty !== undefined ? this.parseNumericQty(serverWmsTotalQty) : null;
-          const wmsDisplayQty = serverWmsDisplayQty !== null && serverWmsDisplayQty !== undefined ? this.parseNumericQty(serverWmsDisplayQty) : null;
 
+          // 🟢 เพิ่มระบบดึงค่าจาก LocalStorage กรณีที่ Refresh เว็บแล้ว DB ยังส่งยอดใหม่มาไม่ทัน
+          const wmsStatus = serverWmsStatus || localStorage.getItem(`wave_${waveKey}_wms_status`) || '';
+          
+          let rawWmsAllocatedQty = serverWmsAllocatedQty !== null && serverWmsAllocatedQty !== undefined ? serverWmsAllocatedQty : localStorage.getItem(`wave_${waveKey}_wms_allocated_qty`);
+          const wmsAllocatedQty = rawWmsAllocatedQty !== null ? this.parseNumericQty(rawWmsAllocatedQty) : null;
+          
+          let rawWmsTotalQty = serverWmsTotalQty !== null && serverWmsTotalQty !== undefined ? serverWmsTotalQty : localStorage.getItem(`wave_${waveKey}_wms_total_qty`);
+          const wmsTotalQty = rawWmsTotalQty !== null ? this.parseNumericQty(rawWmsTotalQty) : null;
+          
+          let rawWmsDisplayQty = serverWmsDisplayQty !== null && serverWmsDisplayQty !== undefined ? serverWmsDisplayQty : localStorage.getItem(`wave_${waveKey}_wms_display_qty`);
+          const wmsDisplayQty = rawWmsDisplayQty !== null ? this.parseNumericQty(rawWmsDisplayQty) : null;
           let loadDateRaw = this.getVal(row, ['Planned_Load_Date', 'Date', 'Plan_Date']);
           let pickDateRaw = this.getVal(row, ['Planned_Pick_Date', 'PickDate', 'Pick_Date']);
           let loadTimeRaw = this.getVal(row, ['Planned_Load_Time', 'Time', 'Plan_Time']);
