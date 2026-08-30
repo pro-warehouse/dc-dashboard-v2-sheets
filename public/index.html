@@ -1902,7 +1902,7 @@
       </div>
     </div>
 
-    <!-- 🟢🟢 โซน Modals (Popup ต่างๆ) 🟢🟢 -->
+    <!-- 🟢🟢 โซน หน้าต่างการตั้งค่า (Settings Modal) 🟢🟢 -->
     <div x-cloak x-show="settings.isOpen" class="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div x-show="settings.isOpen" x-transition.opacity class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm" @click="settings.isOpen = false"></div>
       <div x-show="settings.isOpen" x-transition.scale class="relative bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 z-10 text-left border border-slate-100 flex flex-col max-h-[90vh]">
@@ -1911,21 +1911,20 @@
           <button @click="settings.isOpen = false" class="text-slate-400 hover:text-rose-500 bg-slate-50 hover:bg-rose-50 rounded-lg p-1.5"><i class="fas fa-times text-base w-5 h-5 flex items-center justify-center"></i></button>
         </div>
         <div class="overflow-y-auto custom-scrollbar pr-2 space-y-5">
-          <!-- 🟢 เริ่มส่วนตั้งค่ารอบคั่วเมล็ดกาแฟ -->
           <div>
-            <h4 class="text-[10px] font-bold text-slate-500 uppercase mb-2 border-b border-slate-100 pb-1 tracking-widest mt-3">รอบคั่วเมล็ดกาแฟ (ทีม DP02)</h4>
-            <div class="flex flex-col gap-2 mb-3">
-              <div class="flex items-center bg-slate-50 p-2 rounded-lg border border-slate-200"><span class="text-[10px] font-bold text-slate-600 w-16">อาทิตย์</span><input type="text" x-model="settings.beans[0]" class="flex-1 border border-slate-300 rounded px-2 py-1.5 text-[10px] font-bold outline-none bg-white" /></div>
-              <div class="flex items-center bg-slate-50 p-2 rounded-lg border border-slate-200"><span class="text-[10px] font-bold text-slate-600 w-16">จันทร์</span><input type="text" x-model="settings.beans[1]" class="flex-1 border border-slate-300 rounded px-2 py-1.5 text-[10px] font-bold outline-none bg-white" /></div>
-              <div class="flex items-center bg-slate-50 p-2 rounded-lg border border-slate-200"><span class="text-[10px] font-bold text-slate-600 w-16">อังคาร</span><input type="text" x-model="settings.beans[2]" class="flex-1 border border-slate-300 rounded px-2 py-1.5 text-[10px] font-bold outline-none bg-white" /></div>
-              <div class="flex items-center bg-slate-50 p-2 rounded-lg border border-slate-200"><span class="text-[10px] font-bold text-slate-600 w-16">พุธ</span><input type="text" x-model="settings.beans[3]" class="flex-1 border border-slate-300 rounded px-2 py-1.5 text-[10px] font-bold outline-none bg-white" /></div>
-              <div class="flex items-center bg-slate-50 p-2 rounded-lg border border-slate-200"><span class="text-[10px] font-bold text-slate-600 w-16">พฤหัสฯ</span><input type="text" x-model="settings.beans[4]" class="flex-1 border border-slate-300 rounded px-2 py-1.5 text-[10px] font-bold outline-none bg-white" /></div>
-              <div class="flex items-center bg-slate-50 p-2 rounded-lg border border-slate-200"><span class="text-[10px] font-bold text-slate-600 w-16">ศุกร์</span><input type="text" x-model="settings.beans[5]" class="flex-1 border border-slate-300 rounded px-2 py-1.5 text-[10px] font-bold outline-none bg-white" /></div>
-              <div class="flex items-center bg-slate-50 p-2 rounded-lg border border-slate-200"><span class="text-[10px] font-bold text-slate-600 w-16">เสาร์</span><input type="text" x-model="settings.beans[6]" class="flex-1 border border-slate-300 rounded px-2 py-1.5 text-[10px] font-bold outline-none bg-white" /></div>
+            <h4 class="text-[10px] font-bold text-slate-500 uppercase mb-2 border-b border-slate-100 pb-1 tracking-widest">ตั้งค่ากะการทำงาน (Shift)</h4>
+            <div class="flex flex-col gap-3">
+              <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                <div class="text-[9px] font-bold text-slate-600 mb-1.5"><i class="fas fa-sun text-amber-500 mr-1"></i>กะเช้า (Morning)</div>
+                <div class="flex items-center gap-1"><input type="time" x-model="settings.shifts.morningStart" class="w-full border border-slate-300 rounded-lg px-1 py-1.5 text-[10px] font-bold outline-none text-center" /><span class="text-slate-400">-</span><input type="time" x-model="settings.shifts.morningEnd" class="w-full border border-slate-300 rounded-lg px-1 py-1.5 text-[10px] font-bold outline-none text-center" /></div>
+              </div>
+              <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                <div class="text-[9px] font-bold text-slate-600 mb-1.5"><i class="fas fa-moon text-indigo-500 mr-1"></i>กะดึก (Night)</div>
+                <div class="flex items-center gap-1"><input type="time" x-model="settings.shifts.nightStart" class="w-full border border-slate-300 rounded-lg px-1 py-1.5 text-[10px] font-bold outline-none text-center" /><span class="text-slate-400">-</span><input type="time" x-model="settings.shifts.nightEnd" class="w-full border border-slate-300 rounded-lg px-1 py-1.5 text-[10px] font-bold outline-none text-center" /></div>
+              </div>
             </div>
           </div>
-          <!-- 🟢 จบส่วนตั้งค่ารอบคั่วเมล็ดกาแฟ -->
-          <!-- 🟢 จบส่วนตั้งค่ารอบคั่วเมล็ดกาแฟ -->
+          <div>
             <h4 class="text-[10px] font-bold text-slate-500 uppercase mb-2 border-b border-slate-100 pb-1 tracking-widest">เวลาโหลดSLA (นาที)</h4>
             <div class="grid grid-cols-2 gap-2 mb-3">
               <template x-for="(val, key) in settings.slas" :key="key">
@@ -1951,21 +1950,20 @@
               <div class="bg-slate-50 p-2 rounded-lg border border-slate-200 flex flex-col items-center"><label class="text-[9px] font-bold text-rose-500 mb-1">Other</label><input type="number" x-model.number="settings.maxLimits.Other" class="w-full border border-slate-300 rounded px-1.5 py-1 text-[10px] font-bold outline-none text-center bg-white" /></div>
             </div>
           </div>
-        </div>
-        <!-- 🟢 เริ่มส่วนตั้งค่ารอบคั่วเมล็ดกาแฟ -->
+          <!-- 🟢 ส่วนตั้งค่ารอบคั่วเมล็ดกาแฟ -->
           <div>
-            <h4 class="text-[10px] font-bold text-slate-500 uppercase mb-2 border-b border-slate-100 pb-1 tracking-widest mt-3">รอบคั่วเมล็ดกาแฟ (ทีม DP02)</h4>
-            <div class="grid grid-cols-2 gap-2 mb-3">
-              <div class="flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-200"><span class="text-[9px] font-bold text-slate-600 w-10">อาทิตย์</span><input type="text" x-model="settings.beans[0]" class="border border-slate-300 rounded px-1.5 py-1 text-[10px] font-bold outline-none flex-1 ml-2 bg-white" /></div>
-              <div class="flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-200"><span class="text-[9px] font-bold text-slate-600 w-10">จันทร์</span><input type="text" x-model="settings.beans[1]" class="border border-slate-300 rounded px-1.5 py-1 text-[10px] font-bold outline-none flex-1 ml-2 bg-white" /></div>
-              <div class="flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-200"><span class="text-[9px] font-bold text-slate-600 w-10">อังคาร</span><input type="text" x-model="settings.beans[2]" class="border border-slate-300 rounded px-1.5 py-1 text-[10px] font-bold outline-none flex-1 ml-2 bg-white" /></div>
-              <div class="flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-200"><span class="text-[9px] font-bold text-slate-600 w-10">พุธ</span><input type="text" x-model="settings.beans[3]" class="border border-slate-300 rounded px-1.5 py-1 text-[10px] font-bold outline-none flex-1 ml-2 bg-white" /></div>
-              <div class="flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-200"><span class="text-[9px] font-bold text-slate-600 w-10">พฤหัสฯ</span><input type="text" x-model="settings.beans[4]" class="border border-slate-300 rounded px-1.5 py-1 text-[10px] font-bold outline-none flex-1 ml-2 bg-white" /></div>
-              <div class="flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-200"><span class="text-[9px] font-bold text-slate-600 w-10">ศุกร์</span><input type="text" x-model="settings.beans[5]" class="border border-slate-300 rounded px-1.5 py-1 text-[10px] font-bold outline-none flex-1 ml-2 bg-white" /></div>
-              <div class="flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-200 col-span-2"><span class="text-[9px] font-bold text-slate-600 w-10 text-center">เสาร์</span><input type="text" x-model="settings.beans[6]" class="border border-slate-300 rounded px-1.5 py-1 text-[10px] font-bold outline-none flex-1 ml-2 bg-white" /></div>
+            <h4 class="text-[10px] font-bold text-slate-500 uppercase mb-3 border-b border-slate-100 pb-1 tracking-widest mt-3">รอบคั่วเมล็ดกาแฟ (ทีม DP02)</h4>
+            <div class="flex flex-col gap-2.5 mb-3">
+              <div class="flex items-center gap-3 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 shadow-sm"><span class="text-[10px] font-bold text-slate-600 w-12">อาทิตย์</span><input type="text" x-model="settings.beans[0]" class="flex-1 border border-slate-300 rounded px-2 py-1 text-[10px] font-bold outline-none bg-white focus:border-blue-400" /></div>
+              <div class="flex items-center gap-3 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 shadow-sm"><span class="text-[10px] font-bold text-slate-600 w-12">จันทร์</span><input type="text" x-model="settings.beans[1]" class="flex-1 border border-slate-300 rounded px-2 py-1 text-[10px] font-bold outline-none bg-white focus:border-blue-400" /></div>
+              <div class="flex items-center gap-3 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 shadow-sm"><span class="text-[10px] font-bold text-slate-600 w-12">อังคาร</span><input type="text" x-model="settings.beans[2]" class="flex-1 border border-slate-300 rounded px-2 py-1 text-[10px] font-bold outline-none bg-white focus:border-blue-400" /></div>
+              <div class="flex items-center gap-3 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 shadow-sm"><span class="text-[10px] font-bold text-slate-600 w-12">พุธ</span><input type="text" x-model="settings.beans[3]" class="flex-1 border border-slate-300 rounded px-2 py-1 text-[10px] font-bold outline-none bg-white focus:border-blue-400" /></div>
+              <div class="flex items-center gap-3 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 shadow-sm"><span class="text-[10px] font-bold text-slate-600 w-12">พฤหัสฯ</span><input type="text" x-model="settings.beans[4]" class="flex-1 border border-slate-300 rounded px-2 py-1 text-[10px] font-bold outline-none bg-white focus:border-blue-400" /></div>
+              <div class="flex items-center gap-3 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 shadow-sm"><span class="text-[10px] font-bold text-slate-600 w-12">ศุกร์</span><input type="text" x-model="settings.beans[5]" class="flex-1 border border-slate-300 rounded px-2 py-1 text-[10px] font-bold outline-none bg-white focus:border-blue-400" /></div>
+              <div class="flex items-center gap-3 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 shadow-sm"><span class="text-[10px] font-bold text-slate-600 w-12">เสาร์</span><input type="text" x-model="settings.beans[6]" class="flex-1 border border-slate-300 rounded px-2 py-1 text-[10px] font-bold outline-none bg-white focus:border-blue-400" /></div>
             </div>
           </div>
-          <!-- 🟢 จบส่วนตั้งค่ารอบคั่วเมล็ดกาแฟ -->
+        </div>
         <div class="mt-5 pt-4 border-t border-slate-100 flex justify-end gap-3"><button @click="settings.isOpen = false" class="py-2 px-4 rounded-lg font-bold text-slate-500 bg-slate-100 text-xs uppercase hover:bg-slate-200">ยกเลิก</button><button @click="saveSettings()" class="bg-blue-600 py-2 px-6 rounded-lg font-bold text-white shadow-md text-xs uppercase hover:bg-blue-700">บันทึก</button></div>
       </div>
     </div>
@@ -3564,14 +3562,22 @@
 
         saveSettings() {
           const settingsToSave = { beans: this.settings.beans, slas: this.settings.slas, penaltyRate: this.settings.penaltyRate, shifts: this.settings.shifts, maxLimits: this.settings.maxLimits };
+          
+          // 🟢 บังคับบันทึกทุกค่าลงความจำของ Browser (LocalStorage)
           localStorage.setItem('dc_settings_maxLimits', JSON.stringify(this.settings.maxLimits));
           localStorage.setItem('dc_settings_beans', JSON.stringify(this.settings.beans));
           localStorage.setItem('dc_settings_slas', JSON.stringify(this.settings.slas));
           localStorage.setItem('dc_settings_penalty', JSON.stringify(this.settings.penaltyRate));
           localStorage.setItem('dc_settings_shifts', JSON.stringify(this.settings.shifts));
 
-          Swal.fire({ title: 'กำลังบันทึกการตั้งค่า...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-          fetch('/api/settings/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settingsToSave) }).then((res) => res.json()).then((res) => {
+          // 🟢 สั่งให้หน้าต่างตั้งค่าปิดทันที และอัปเดตข้อมูลบนหน้าจอใหม่ 
+          this.settings.isOpen = false; 
+          this.refreshDataViews();
+          Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', text: 'ระบบอัปเดตการตั้งค่าเรียบร้อยแล้ว', timer: 1500, showConfirmButton: false });
+
+          // 🟢 ส่งข้อมูลสำรองไปที่ Server แบบพื้นหลัง (ไม่ให้ Error มากวนการใช้งาน)
+          fetch('/api/settings/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settingsToSave) }).catch(() => {});
+        },
             Swal.close();
             if (res.success) {
               Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'อัปเดตการตั้งค่าเรียบร้อย', timer: 2000, showConfirmButton: false });
