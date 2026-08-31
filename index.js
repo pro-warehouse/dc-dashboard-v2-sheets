@@ -568,10 +568,8 @@ app.post('/api/waves/update-status', async (req, res) => {
       const updatedWaves = await fetchWaveDataFromSheets();
       await updateDashboardSummary(updatedWaves);
 
-      // 🟢 ถ้ามีการกดจ่ายงาน ให้คำนวณกราฟ Hourly ใหม่ทันที
-      if (triggerAllocationUpdate) {
-        await updateHourlyAllocation(updatedWaves);
-      }
+      // 🟢 บังคับคำนวณกราฟ Hourly ใหม่ทุกครั้ง ป้องกันยอดตกหล่น
+      await updateHourlyAllocation(updatedWaves);
 
       waveDataCache = null; 
     }
@@ -774,6 +772,11 @@ app.post('/api/wms-204/bulk', async (req, res) => {
           data: updateData,
         },
       });
+      
+      // 🟢 ดึงข้อมูลใหม่ล่าสุดมาคำนวณและบันทึกชีต Hourly ทันที!
+      const updatedWaves = await fetchWaveDataFromSheets();
+      await updateHourlyAllocation(updatedWaves);
+
       waveDataCache = null; 
     }
 
