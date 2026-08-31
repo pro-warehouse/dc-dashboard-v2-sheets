@@ -43,14 +43,19 @@ const sheetLock = new AsyncLock();
 const DB_SPREADSHEET_ID = '1TL-tj-BrvYM7i_wNHlA0x641_VOqfT9SLpmm2NZATOo';
 const keyFilePath = path.join(__dirname, 'key.json');
 let sheets = null;
+let drive = null; // เพิ่มตัวแปรสำหรับ Drive
 let isSheetsDbConfigured = false;
 
 if (fs.existsSync(keyFilePath)) {
   const sheetsAuth = new google.auth.GoogleAuth({
     keyFile: keyFilePath,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    scopes: [
+      'https://www.googleapis.com/auth/spreadsheets',
+      'https://www.googleapis.com/auth/drive' // เพิ่มสิทธิ์การเข้าถึง Drive
+    ],
   });
   sheets = google.sheets({ version: 'v4', auth: sheetsAuth });
+  drive = google.drive({ version: 'v3', auth: sheetsAuth }); // เปิดระบบ Drive API
   isSheetsDbConfigured = true;
   console.log('✅ โหลดการตั้งค่า Google Sheets สำเร็จ');
   initSheetsHeaders(); 
