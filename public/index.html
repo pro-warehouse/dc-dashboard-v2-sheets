@@ -2298,11 +2298,11 @@
 
           fetch('/api/settings').then((res) => res.json()).then((data) => {
             if (data) {
-              if (!localStorage.getItem('dc_settings_beans') && data.beans) this.settings.beans = data.beans;
-              if (!localStorage.getItem('dc_settings_maxLimits') && data.maxLimits) this.settings.maxLimits = data.maxLimits;
-              if (!localStorage.getItem('dc_settings_slas') && data.slas) this.settings.slas = data.slas;
-              if (!localStorage.getItem('dc_settings_penalty') && data.penaltyRate) this.settings.penaltyRate = data.penaltyRate;
-              if (!localStorage.getItem('dc_settings_shifts') && data.shifts) this.settings.shifts = data.shifts;
+              if (data.beans) { this.settings.beans = data.beans; localStorage.setItem('dc_settings_beans', JSON.stringify(data.beans)); }
+if (data.maxLimits) { this.settings.maxLimits = data.maxLimits; localStorage.setItem('dc_settings_maxLimits', JSON.stringify(data.maxLimits)); }
+if (data.slas) { this.settings.slas = data.slas; localStorage.setItem('dc_settings_slas', JSON.stringify(data.slas)); }
+if (data.penaltyRate !== undefined) { this.settings.penaltyRate = data.penaltyRate; localStorage.setItem('dc_settings_penalty', JSON.stringify(data.penaltyRate)); }
+if (data.shifts) { this.settings.shifts = data.shifts; localStorage.setItem('dc_settings_shifts', JSON.stringify(data.shifts)); }
             }
           }).catch(() => {});
 
