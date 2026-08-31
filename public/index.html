@@ -4269,9 +4269,11 @@ if (data.shifts) { this.settings.shifts = data.shifts; localStorage.setItem('dc_
           if (showDP02) datasets.push({ label: 'DP02', data: this.execAnalytics.hourlyAlloc.map(h => h.dp02), backgroundColor: '#f59e0b', borderRadius: 4, stack: 'Stack 0', order: 1 });
           if (showOther) datasets.push({ label: 'Other', data: this.execAnalytics.hourlyAlloc.map(h => h.other), backgroundColor: '#94a3b8', borderRadius: 4, stack: 'Stack 0', order: 1 });
           
-          datasets.push({ type: 'line', label: 'ยอดค้างลาน (Pending)', data: this.execAnalytics.hourlyAlloc.map(h => h.pending), borderColor: '#8b5cf6', backgroundColor: '#8b5cf6', borderWidth: 2, fill: false, tension: 0.3, pointRadius: 3, order: 0 });
-          datasets.push({ type: 'line', label: 'Max Limit (Target)', data: Array(24).fill(targetVal), borderColor: '#ef4444', borderWidth: 2, borderDash: [5, 5], fill: false, pointRadius: 0, order: 0 });
+          // เพิ่ม stack: 'pendingLine' เพื่อแยกกลุ่ม
+datasets.push({ type: 'line', label: 'ยอดค้างลาน (Pending)', data: this.execAnalytics.hourlyAlloc.map(h => h.pending), borderColor: '#8b5cf6', backgroundColor: '#8b5cf6', borderWidth: 2, fill: false, tension: 0.3, pointRadius: 3, order: 0, stack: 'pendingLine' });
 
+// เพิ่ม stack: 'targetLine' เพื่อแยกกลุ่ม
+datasets.push({ type: 'line', label: 'Max Limit (Target)', data: Array(24).fill(targetVal), borderColor: '#ef4444', borderWidth: 2, borderDash: [5, 5], fill: false, pointRadius: 0, order: 0, stack: 'targetLine' });
           // 🔥 จุดที่ปรับปรุง: ถ้ามีกราฟอยู่แล้ว ให้อัปเดตข้อมูลแทนการ destroy ทิ้ง
           if (this.hourlyAllocChartInstance) {
             this.hourlyAllocChartInstance.data.labels = this.execAnalytics.hourlyAlloc.map(h => h.hour);
