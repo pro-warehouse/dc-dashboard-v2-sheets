@@ -4244,7 +4244,19 @@ if (data.shifts) { this.settings.shifts = data.shifts; localStorage.setItem('dc_
                 }
               }
             }
+          }); // สิ้นสุดบล็อก this.waves.forEach
+
+          // 🔥 เพิ่มโค้ดล้างค่าชั่วโมงในอนาคตตรงนี้
+          let currentNowMs = this.now ? this.now.getTime() : Date.now();
+          hourlyMap.forEach(hMap => {
+            let hStart = new Date(`${targetDate}T${hMap.hour.split(':')[0]}:00:00+07:00`).getTime();
+            
+            // ถ้าชั่วโมงนั้นยังมาไม่ถึง ให้ตั้งค่ายอดค้างเป็น null เพื่อตัดกราฟเส้นทิ้ง
+            if (hStart > currentNowMs) {
+              hMap.pending = null; 
+            }
           });
+
           this.execAnalytics.hourlyAlloc = hourlyMap;
           this.renderHourlyChart();
         },
