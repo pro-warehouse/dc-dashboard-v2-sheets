@@ -283,7 +283,8 @@ async function updateHourlyAllocation(dbWaves) {
           agg[key] = { Date: dateStr, Hour: `${hourStr}:00`, DM02_Qty: 0, DP02_Qty: 0, Other_Qty: 0, Total_Qty: 0 };
         }
 
-        let qty = Number(w.Total_Qty) || 0;
+        // ✅ เปลี่ยนให้ดึงข้อมูลจาก WMS 204 ก่อน ถ้าไม่มีค่อยใช้ Total_Qty เดิม
+let qty = Number(w.WMS_204_Display_Qty) || Number(w.WMS_Display_Qty) || Number(w.Total_Qty) || 0;
         let owner = String(w.Owner_Code || '').toUpperCase();
 
         if (owner.includes('DM02')) agg[key].DM02_Qty += qty;
