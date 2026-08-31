@@ -4195,7 +4195,7 @@
               let actDate = allocStep.actualDateObj.toLocaleDateString('en-CA', {timeZone: 'Asia/Bangkok'});
               if (actDate === targetDate) {
                 let hr = allocStep.actualDateObj.getHours();
-                let qty = w.totalPieces || 0;
+                let qty = w.wmsTotalQty || w.totalPieces || 0;
                 let owner = w.ownerGroup || 'Other';
                 if (owner === 'DM02') hourlyMap[hr].dm02 += qty;
                 else if (owner === 'DP02') hourlyMap[hr].dp02 += qty;
