@@ -645,9 +645,10 @@ app.post('/api/settings/save', async (req, res) => {
     if (newSettings.beans !== undefined) defaultSettings.beans = newSettings.beans;
     if (newSettings.maxLimits !== undefined) defaultSettings.maxLimits = newSettings.maxLimits;
 
-    fs.writeFileSync(path.join(__dirname, 'settings.json'), JSON.stringify(defaultSettings, null, 4), 'utf8');
-    await saveSettingsToSheet();
-    res.json({ success: true });
+    // ค้นหาใน /api/settings/save และแก้ไขปิดคำสั่งไว้แบบนี้ครับ:
+// fs.writeFileSync(path.join(__dirname, 'settings.json'), JSON.stringify(defaultSettings, null, 4), 'utf8');
+await saveSettingsToSheet();
+res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Error' });
   }
