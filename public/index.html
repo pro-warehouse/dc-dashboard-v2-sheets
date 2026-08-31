@@ -4203,42 +4203,40 @@ if (data.shifts) { this.settings.shifts = data.shifts; localStorage.setItem('dc_
           
           this.waves.forEach(w => {
             let qty = w.wmsTotalQty || w.totalPieces || 0;
-            const allocStep = w.steps[0]; // ขั้นตอนจ่ายงาน
-            const pickStep = w.steps[2]; // ขั้นตอนหยิบงาน
+            const allocStep = w.steps[0];
+            const pickStep = w.steps[2];
             
             if (allocStep && allocStep.status === 'done' && allocStep.actualDateObj) {
               let actDate = allocStep.actualDateObj.toLocaleDateString('en-CA', {timeZone: 'Asia/Bangkok'});
               
-              // 1. คำนวณยอดที่ถูกจ่ายลงลานในชั่วโมงนั้นๆ (กราฟแท่ง)
+              // 🟢 ย้ายเงื่อนไขมาครอบไว้ตรงนี้: คำนวณเฉพาะงานที่ถูกจ่ายใน "วันที่เลือก" เท่านั้น!
               if (actDate === targetDate) {
+                
+                // 1. คำนวณยอดที่ถูกจ่ายลงลานในชั่วโมงนั้นๆ (กราฟแท่ง)
                 let hr = allocStep.actualDateObj.getHours();
                 let owner = w.ownerGroup || 'Other';
                 if (owner === 'DM02') hourlyMap[hr].dm02 += qty;
                 else if (owner === 'DP02') hourlyMap[hr].dp02 += qty;
                 else hourlyMap[hr].other += qty;
                 hourlyMap[hr].total += qty;
-              }
-              
-              // 2. คำนวณยอด "ค้างลาน" (Pending) สะสม ณ สิ้นสุดแต่ละชั่วโมง (กราฟเส้น)
-              let allocTime = allocStep.actualDateObj.getTime();
-              let pickTime = Infinity;
-              
-              if (pickStep && pickStep.status === 'done' && pickStep.actualDateObj) {
-                pickTime = pickStep.actualDateObj.getTime();
-              } else if (String(w.wmsStatus || '').toUpperCase().includes('PICK COMPLETED') || String(w.wmsStatus || '').toUpperCase().includes('SHIP COMPLETED')) {
-                // ถ้า WMS บอกว่าเสร็จแล้ว แต่ไม่มีเวลาลงไว้ ให้ถือว่าไม่ค้าง
-                pickTime = allocTime + 1000; 
-              }
-
-              for (let h = 0; h < 24; h++) {
-                // เทียบเวลา ณ สิ้นสุดของชั่วโมงนั้นๆ เช่น 08:59:59
-                let hourEnd = new Date(`${targetDate}T${String(h).padStart(2, '0')}:59:59+07:00`).getTime();
                 
-                // ถ้ายอดถูกจ่ายงานก่อนหมดชั่วโมงนี้ และยังหยิบไม่เสร็จก่อนหมดชั่วโมงนี้ = ค้างลาน
-                if (allocTime <= hourEnd && pickTime > hourEnd) {
-                  hourlyMap[h].pending += qty;
+                // 2. คำนวณยอด "ค้างลาน" (Pending) (กราฟเส้น)
+                let allocTime = allocStep.actualDateObj.getTime();
+                let pickTime = Infinity;
+                
+                if (pickStep && pickStep.status === 'done' && pickStep.actualDateObj) {
+                  pickTime = pickStep.actualDateObj.getTime();
+                } else if (String(w.wmsStatus || '').toUpperCase().includes('PICK COMPLETED') || String(w.wmsStatus || '').toUpperCase().includes('SHIP COMPLETED')) {
+                  pickTime = allocTime + 1000; 
                 }
-              }
+
+                for (let h = 0; h < 24; h++) {
+                  let hourEnd = new Date(`${targetDate}T${String(h).padStart(2, '0')}:59:59+07:00`).getTime();
+                  if (allocTime <= hourEnd && pickTime > hourEnd) {
+                    hourlyMap[h].pending += qty;
+                  }
+                }
+              } // จบเงื่อนไข if (actDate === targetDate)
             }
           });
           this.execAnalytics.hourlyAlloc = hourlyMap;
