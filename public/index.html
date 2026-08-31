@@ -3186,7 +3186,7 @@
             const allocStep = w.steps[0];
             if (allocStep && allocStep.status === 'done' && allocStep.actualDateObj) {
               let hr = allocStep.actualDateObj.getHours();
-              let qty = w.totalPieces || 0;
+              let qty = this.getDisplayTotalPieces(w) || 0;
               let owner = w.ownerGroup || 'Other';
               if (owner === 'DM02') hourlyAllocMap[hr].dm02 += qty;
               else if (owner === 'DP02') hourlyAllocMap[hr].dp02 += qty;
