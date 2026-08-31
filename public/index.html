@@ -4251,19 +4251,10 @@ if (data.shifts) { this.settings.shifts = data.shifts; localStorage.setItem('dc_
         
         renderHourlyChart() {
           const canvas = document.getElementById('hourlyAllocChart');
-          
-          // 🔥 1. Safety Check: เช็คว่า Canvas ต้องมีอยู่จริง และ "ต้องมองเห็นได้บนหน้าจอ" เท่านั้นถึงจะวาดกราฟ
           if (!canvas || canvas.offsetParent === null) return;
-          
-          // 🔥 2. ดึง Context 2D ให้ชัดเจน ป้องกัน Chart.js เอ๋อตอนหาพื้นที่วาด
           const ctx = canvas.getContext('2d');
           if (!ctx) return;
 
-          // เคลียร์กราฟเก่าทิ้งก่อนวาดใหม่
-          if (this.hourlyAllocChartInstance) {
-            this.hourlyAllocChartInstance.destroy();
-          }
-          
           let targetVal = 0;
           if (this.hourlyFilter.owner === 'DM02') targetVal = this.settings.maxLimits.DM02 || 0;
           else if (this.hourlyFilter.owner === 'DP02') targetVal = this.settings.maxLimits.DP02 || 0;
@@ -4277,29 +4268,35 @@ if (data.shifts) { this.settings.shifts = data.shifts; localStorage.setItem('dc_
           if (showDM02) datasets.push({ label: 'DM02', data: this.execAnalytics.hourlyAlloc.map(h => h.dm02), backgroundColor: '#3b82f6', borderRadius: 4, stack: 'Stack 0', order: 1 });
           if (showDP02) datasets.push({ label: 'DP02', data: this.execAnalytics.hourlyAlloc.map(h => h.dp02), backgroundColor: '#f59e0b', borderRadius: 4, stack: 'Stack 0', order: 1 });
           if (showOther) datasets.push({ label: 'Other', data: this.execAnalytics.hourlyAlloc.map(h => h.other), backgroundColor: '#94a3b8', borderRadius: 4, stack: 'Stack 0', order: 1 });
-
-          // เส้นกราฟสีม่วง (ยอดค้างลาน)
-          datasets.push({ type: 'line', label: 'ยอดค้างลาน (Pending)', data: this.execAnalytics.hourlyAlloc.map(h => h.pending), borderColor: '#8b5cf6', backgroundColor: '#8b5cf6', borderWidth: 2, fill: false, tension: 0.3, pointRadius: 3, order: 0 });
           
-          // เส้นกราฟสีแดงขีดประ (Max Limit)
+          datasets.push({ type: 'line', label: 'ยอดค้างลาน (Pending)', data: this.execAnalytics.hourlyAlloc.map(h => h.pending), borderColor: '#8b5cf6', backgroundColor: '#8b5cf6', borderWidth: 2, fill: false, tension: 0.3, pointRadius: 3, order: 0 });
           datasets.push({ type: 'line', label: 'Max Limit (Target)', data: Array(24).fill(targetVal), borderColor: '#ef4444', borderWidth: 2, borderDash: [5, 5], fill: false, pointRadius: 0, order: 0 });
 
-          this.hourlyAllocChartInstance = new Chart(ctx, {
-            type: 'bar',
-            data: { labels: this.execAnalytics.hourlyAlloc.map(h => h.hour), datasets: datasets },
-            options: { 
-              responsive: true, 
-              maintainAspectRatio: false, 
-              scales: { 
-                x: { stacked: true, grid: { display: false }, ticks: { font: { family: 'Kanit', size: 10 } } }, 
-                y: { stacked: true, ticks: { font: { family: 'Kanit', size: 10 } } } 
-              }, 
-              plugins: { 
-                legend: { position: 'top', labels: { font: { family: 'Kanit', size: 11, usePointStyle: true } } }, 
-                tooltip: { mode: 'index', intersect: false } 
-              } 
-            }
-          });
+          // 🔥 จุดที่ปรับปรุง: ถ้ามีกราฟอยู่แล้ว ให้อัปเดตข้อมูลแทนการ destroy ทิ้ง
+          if (this.hourlyAllocChartInstance) {
+            this.hourlyAllocChartInstance.data.labels = this.execAnalytics.hourlyAlloc.map(h => h.hour);
+            this.hourlyAllocChartInstance.data.datasets = datasets;
+            this.hourlyAllocChartInstance.update('none'); // อัปเดตแบบ 'none' ไม่ให้กระตุกเวลา Auto-Refresh
+          } else {
+            // ถ้ายังไม่มีกราฟ (โหลดครั้งแรก) ถึงจะสร้างใหม่
+            this.hourlyAllocChartInstance = new Chart(ctx, {
+              type: 'bar',
+              data: { labels: this.execAnalytics.hourlyAlloc.map(h => h.hour), datasets: datasets },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false, // ปิดแอนิเมชันเริ่มต้นลดภาระเครื่อง
+                scales: {
+                  x: { stacked: true, grid: { display: false }, ticks: { font: { family: 'Kanit', size: 10 } } },
+                  y: { stacked: true, ticks: { font: { family: 'Kanit', size: 10 } } }
+                },
+                plugins: {
+                  legend: { position: 'top', labels: { font: { family: 'Kanit', size: 11, usePointStyle: true } } },
+                  tooltip: { mode: 'index', intersect: false }
+                }
+              }
+            });
+          }
         },
 
         fetchLast204Time() {
