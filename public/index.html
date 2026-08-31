@@ -1445,6 +1445,18 @@
                   </td>
                 </template>
               </tr>
+              <!-- แถว ยอดค้างลาน (Pending) -->
+              <tr x-show="hourlyFilter.owner === 'all'" class="bg-indigo-50/50 border-t border-slate-200">
+                <td class="py-1 font-bold text-indigo-600 text-[9px] text-left pl-2 border-r border-indigo-100">ค้างสะสม</td>
+                <template x-for="h in execAnalytics.hourlyAlloc" :key="'pend'+h.hour">
+                  <td class="p-[1px]">
+                    <div class="w-full py-0.5 text-[8px] font-bold transition-colors rounded-[3px]"
+                         :class="h.pending > ((settings.maxLimits.DM02||0) + (settings.maxLimits.DP02||0) + (settings.maxLimits.Other||0)) ? 'bg-rose-500 text-white shadow-sm' : 'text-indigo-600'"
+                         x-text="h.pending > 0 ? (h.pending >= 1000 ? (h.pending/1000).toFixed(1)+'k' : h.pending) : '-'"
+                         :title="h.pending.toLocaleString() + ' ชิ้น'"></div>
+                  </td>
+                </template>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -4186,21 +4198,46 @@ if (data.shifts) { this.settings.shifts = data.shifts; localStorage.setItem('dc_
         },
 
         updateHourlyChart() {
-          let hourlyMap = Array(24).fill(0).map((_, i) => ({ hour: String(i).padStart(2, '0') + ':00', dm02: 0, dp02: 0, other: 0, total: 0 }));
+          let hourlyMap = Array(24).fill(0).map((_, i) => ({ hour: String(i).padStart(2, '0') + ':00', dm02: 0, dp02: 0, other: 0, total: 0, pending: 0 }));
           let targetDate = this.hourlyFilter.date;
-          let targetOwner = this.hourlyFilter.owner;
+          
           this.waves.forEach(w => {
-            const allocStep = w.steps[0];
+            let qty = w.wmsTotalQty || w.totalPieces || 0;
+            const allocStep = w.steps[0]; // ขั้นตอนจ่ายงาน
+            const pickStep = w.steps[2]; // ขั้นตอนหยิบงาน
+            
             if (allocStep && allocStep.status === 'done' && allocStep.actualDateObj) {
               let actDate = allocStep.actualDateObj.toLocaleDateString('en-CA', {timeZone: 'Asia/Bangkok'});
+              
+              // 1. คำนวณยอดที่ถูกจ่ายลงลานในชั่วโมงนั้นๆ (กราฟแท่ง)
               if (actDate === targetDate) {
                 let hr = allocStep.actualDateObj.getHours();
-                let qty = w.wmsTotalQty || w.totalPieces || 0;
                 let owner = w.ownerGroup || 'Other';
                 if (owner === 'DM02') hourlyMap[hr].dm02 += qty;
                 else if (owner === 'DP02') hourlyMap[hr].dp02 += qty;
                 else hourlyMap[hr].other += qty;
                 hourlyMap[hr].total += qty;
+              }
+              
+              // 2. คำนวณยอด "ค้างลาน" (Pending) สะสม ณ สิ้นสุดแต่ละชั่วโมง (กราฟเส้น)
+              let allocTime = allocStep.actualDateObj.getTime();
+              let pickTime = Infinity;
+              
+              if (pickStep && pickStep.status === 'done' && pickStep.actualDateObj) {
+                pickTime = pickStep.actualDateObj.getTime();
+              } else if (String(w.wmsStatus || '').toUpperCase().includes('PICK COMPLETED') || String(w.wmsStatus || '').toUpperCase().includes('SHIP COMPLETED')) {
+                // ถ้า WMS บอกว่าเสร็จแล้ว แต่ไม่มีเวลาลงไว้ ให้ถือว่าไม่ค้าง
+                pickTime = allocTime + 1000; 
+              }
+
+              for (let h = 0; h < 24; h++) {
+                // เทียบเวลา ณ สิ้นสุดของชั่วโมงนั้นๆ เช่น 08:59:59
+                let hourEnd = new Date(`${targetDate}T${String(h).padStart(2, '0')}:59:59+07:00`).getTime();
+                
+                // ถ้ายอดถูกจ่ายงานก่อนหมดชั่วโมงนี้ และยังหยิบไม่เสร็จก่อนหมดชั่วโมงนี้ = ค้างลาน
+                if (allocTime <= hourEnd && pickTime > hourEnd) {
+                  hourlyMap[h].pending += qty;
+                }
               }
             }
           });
@@ -4227,6 +4264,8 @@ if (data.shifts) { this.settings.shifts = data.shifts; localStorage.setItem('dc_
           if (showDP02) datasets.push({ label: 'DP02', data: this.execAnalytics.hourlyAlloc.map(h => h.dp02), backgroundColor: '#f59e0b', borderRadius: 4, stack: 'Stack 0', order: 1 });
           if (showOther) datasets.push({ label: 'Other', data: this.execAnalytics.hourlyAlloc.map(h => h.other), backgroundColor: '#94a3b8', borderRadius: 4, stack: 'Stack 0', order: 1 });
 
+          // เพิ่มเส้นกราฟแสดงยอดค้างลาน (สีม่วง)
+          datasets.push({ type: 'line', label: 'ยอดค้างลาน (Pending)', data: this.execAnalytics.hourlyAlloc.map(h => h.pending), borderColor: '#8b5cf6', backgroundColor: '#8b5cf6', borderWidth: 2, fill: false, tension: 0.3, pointRadius: 3, order: 0 });
           datasets.push({ type: 'line', label: 'Max Limit (Target)', data: Array(24).fill(targetVal), borderColor: '#ef4444', borderWidth: 2, borderDash: [5, 5], fill: false, pointRadius: 0, order: 0 });
 
           this.hourlyAllocChartInstance = new Chart(hourlyCtx, {
