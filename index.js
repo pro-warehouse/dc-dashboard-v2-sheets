@@ -664,30 +664,83 @@ app.post('/api/waves/bulk-insert', async (req, res) => {
     if (!sheetData || sheetData.length === 0) return res.status(400).json({ success: false, message: 'ไม่พบข้อมูล' });
 
     if (isSheetsDbConfigured) {
+      // 1. ดึงข้อมูลเดิมมาเช็คก่อน
       const response = await sheets.spreadsheets.values.get({
         spreadsheetId: DB_SPREADSHEET_ID,
-        range: 'Wave_Monitoring!1:1',
+        range: 'Wave_Monitoring!A:ZZ',
       });
       
-      const headers = response.data.values ? response.data.values[0] : [];
+      const rows = response.data.values || [];
+      const headers = rows.length > 0 ? rows[0] : [];
       
-      const rowsToAdd = sheetData.map(row => {
-        return headers.map(header => {
-          return row[header] !== undefined && row[header] !== null ? String(row[header]) : '';
+      const getColLetter = (colIndex) => {
+        let temp, letter = '';
+        while (colIndex >= 0) {
+          temp = colIndex % 26;
+          letter = String.fromCharCode(temp + 65) + letter;
+          colIndex = (colIndex - temp) / 26 - 1;
+        }
+        return letter;
+      };
+
+      // 2. สร้างแผนที่ (Map) เก็บเลขบรรทัดของ Wave ที่มีอยู่แล้ว
+      const existingWaves = {};
+      if (headers.length > 0) {
+        const waveIdx = headers.indexOf('Wave_Number');
+        rows.forEach((r, index) => {
+          if (index > 0 && r[waveIdx]) {
+            existingWaves[standardizeWaveId(r[waveIdx])] = index + 1; // เก็บอ้างอิงบรรทัด
+          }
         });
+      }
+
+      const updateData = [];
+      const newRowsToAdd = [];
+
+      // 3. คัดแยกข้อมูลว่าอันไหนต้อง "อัปเดต" อันไหนต้อง "เพิ่มใหม่"
+      sheetData.forEach(row => {
+        const waveId = standardizeWaveId(row['Wave_Number']);
+        const existingRowIndex = existingWaves[waveId];
+
+        if (existingRowIndex) {
+          // 🟢 มีข้อมูลอยู่แล้ว -> เตรียมอัปเดตข้อมูลทับบรรทัดเดิม
+          headers.forEach((header, i) => {
+            if (row[header] !== undefined && row[header] !== null) {
+              updateData.push({
+                range: `Wave_Monitoring!${getColLetter(i)}${existingRowIndex}`,
+                values: [[String(row[header])]]
+              });
+            }
+          });
+        } else {
+          // 🔵 ยังไม่มีข้อมูล -> เตรียมเพิ่มบรรทัดใหม่
+          const newRowData = headers.map(header => row[header] !== undefined && row[header] !== null ? String(row[header]) : '');
+          newRowsToAdd.push(newRowData);
+        }
       });
 
-      await sheets.spreadsheets.values.append({
-        spreadsheetId: DB_SPREADSHEET_ID,
-        range: 'Wave_Monitoring!A1',
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values: rowsToAdd },
-      });
+      // 4. สั่งอัปเดตบรรทัดเดิมที่พบ (ถ้ามี)
+      if (updateData.length > 0) {
+        await sheets.spreadsheets.values.batchUpdate({
+          spreadsheetId: DB_SPREADSHEET_ID,
+          requestBody: { valueInputOption: 'USER_ENTERED', data: updateData },
+        });
+      }
 
-      // 📊 ซิงค์ Summary และ Hourly กลับเมื่อมีแผนใหม่
+      // 5. สั่งเพิ่มข้อมูลบรรทัดใหม่ (ถ้ามี)
+      if (newRowsToAdd.length > 0) {
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: DB_SPREADSHEET_ID,
+          range: 'Wave_Monitoring!A1',
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: newRowsToAdd },
+        });
+      }
+
+      // 6. อัปเดต Summary และกราฟให้เป็นปัจจุบัน
       const updatedWaves = await fetchWaveDataFromSheets();
       await updateDashboardSummary(updatedWaves);
-      await updateHourlyAllocation(updatedWaves); // 🟢 อัปเดต Hourly
+      await updateHourlyAllocation(updatedWaves);
       waveDataCache = null; 
     }
 
