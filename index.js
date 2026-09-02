@@ -707,8 +707,10 @@ app.post('/api/waves/bulk-insert', async (req, res) => {
           headers.forEach((header, i) => {
             // 🔒 ป้องกันการเขียนทับคอลัมน์ Owner และ เลขที่เอกสาร (Booking No / Order Number)
             const protectedColumns = ['Owner_Code', 'Vehicle_Booking_No', 'Order_Number'];
-            if (protectedColumns.includes(header)) {
-              return; // ข้ามการทำงานรอบนี้ เพื่อไม่ให้เกิดผลกระทบกับข้อมูลเดิมเด็ดขาด
+            
+            // เพิ่มเงื่อนไขเช็คคำนำหน้า (startsWith) เพื่อบล็อกคอลัมน์สถานะ, เวลา และผู้ใช้งานทั้งหมด
+            if (protectedColumns.includes(header) || header.startsWith('Status_') || header.startsWith('Time_') || header.startsWith('User_') || header.includes('Timestamp')) {
+              return; // ข้ามการทำงานรอบนี้ เพื่อไม่ให้เกิดผลกระทบกับข้อมูลหน้างานเดิมเด็ดขาด
             }
 
             if (row[header] !== undefined && row[header] !== null) {
