@@ -705,6 +705,12 @@ app.post('/api/waves/bulk-insert', async (req, res) => {
         if (existingRowIndex) {
           // 🟢 มีข้อมูลอยู่แล้ว -> เตรียมอัปเดตข้อมูลทับบรรทัดเดิม
           headers.forEach((header, i) => {
+            // 🔒 ป้องกันการเขียนทับคอลัมน์ Owner และ เลขที่เอกสาร (Booking No / Order Number)
+            const protectedColumns = ['Owner_Code', 'Vehicle_Booking_No', 'Order_Number'];
+            if (protectedColumns.includes(header)) {
+              return; // ข้ามการทำงานรอบนี้ เพื่อไม่ให้เกิดผลกระทบกับข้อมูลเดิมเด็ดขาด
+            }
+
             if (row[header] !== undefined && row[header] !== null) {
               updateData.push({
                 range: `Wave_Monitoring!${getColLetter(i)}${existingRowIndex}`,
