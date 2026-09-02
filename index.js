@@ -922,6 +922,117 @@ app.get(/.*/, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// ==========================================
+// 🧹 ฟังก์ชัน Backup และย้ายข้อมูลที่เก่ากว่า 7 วันอัตโนมัติ
+// ==========================================
+async function backupAndCleanOldWaves() {
+  await sheetLock.acquire(); // เข้าคิวล็อก ป้องกันชนกับคำสั่งอื่น
+  try {
+    if (!isSheetsDbConfigured) return;
+    console.log('🔄 กำลังตรวจสอบและย้ายข้อมูลที่เก่ากว่า 7 วัน...');
+
+    // 1. ดึงข้อมูลทั้งหมดจาก Wave_Monitoring
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: DB_SPREADSHEET_ID,
+      range: 'Wave_Monitoring!A:ZZ',
+    });
+    
+    const rows = response.data.values;
+    if (!rows || rows.length <= 1) return; // ไม่มีข้อมูล หรือมีแค่ Header
+
+    const headers = rows[0];
+    const pickDateIdx = headers.indexOf('Planned_Pick_Date');
+    if (pickDateIdx === -1) return;
+
+    // 2. คำนวณวันที่ย้อนหลัง 7 วัน
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - 7);
+    cutoffDate.setHours(0, 0, 0, 0);
+    
+    const keepRows = [headers]; // ข้อมูลที่ยังไม่ถึง 7 วัน (เก็บไว้)
+    const backupRows = [];      // ข้อมูลที่เก่ากว่า 7 วัน (ย้าย)
+
+    // 3. คัดแยกข้อมูล
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const dateStr = row[pickDateIdx];
+      let rowDate = null;
+      
+      if (dateStr) {
+        rowDate = new Date(dateStr);
+      }
+      
+      if (rowDate && !isNaN(rowDate.getTime()) && rowDate < cutoffDate) {
+        backupRows.push(row);
+      } else {
+        keepRows.push(row);
+      }
+    }
+
+    // 4. ถ้ามีข้อมูลต้องย้าย ให้ดำเนินการย้าย
+    if (backupRows.length > 0) {
+      // 4.1 เช็คว่ามีชีต Wave_History หรือยัง ถ้ายังให้สร้างอัตโนมัติ
+      try {
+        await sheets.spreadsheets.values.get({ spreadsheetId: DB_SPREADSHEET_ID, range: `Wave_History!A1` });
+      } catch (e) {
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId: DB_SPREADSHEET_ID,
+          requestBody: { requests: [{ addSheet: { properties: { title: 'Wave_History' } } }] }
+        });
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: DB_SPREADSHEET_ID, range: `Wave_History!A1`,
+          valueInputOption: 'USER_ENTERED', requestBody: { values: [headers] }
+        });
+        console.log('✅ สร้างชีตประวัติ Wave_History เรียบร้อย');
+      }
+
+      // 4.2 Append ข้อมูลเก่าไปต่อท้ายในชีต Wave_History
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: DB_SPREADSHEET_ID,
+        range: 'Wave_History!A:A',
+        valueInputOption: 'USER_ENTERED',
+        insertDataOption: 'INSERT_ROWS',
+        requestBody: { values: backupRows },
+      });
+
+      // 4.3 ล้างข้อมูลเดิมใน Wave_Monitoring และใส่เฉพาะข้อมูลใหม่กลับเข้าไป
+      await sheets.spreadsheets.values.clear({
+        spreadsheetId: DB_SPREADSHEET_ID,
+        range: 'Wave_Monitoring!A1:ZZ',
+      });
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: DB_SPREADSHEET_ID,
+        range: 'Wave_Monitoring!A1',
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: keepRows },
+      });
+
+      console.log(`✅ Backup และลบข้อมูลเก่าออกจากระบบจำนวน ${backupRows.length} รายการเรียบร้อย`);
+      
+      // ล้าง Cache ของเซิร์ฟเวอร์เพื่อให้ข้อมูลอัปเดต
+      waveDataCache = null; 
+      
+      // สั่งอัปเดตหน้า Dashboard และกราฟด้วยข้อมูลชุดใหม่
+      const updatedWaves = await fetchWaveDataFromSheets();
+      await updateDashboardSummary(updatedWaves);
+      await updateHourlyAllocation(updatedWaves);
+
+    } else {
+      console.log('✅ ไม่มีข้อมูลเก่าเกิน 7 วันที่ต้อง Backup');
+    }
+  } catch (err) {
+    console.error('❌ เกิดข้อผิดพลาดในการ Backup ข้อมูลเก่า:', err.message);
+  } finally {
+    sheetLock.release();
+  }
+}
+
+// 🟢 สั่งให้ทำงานอัตโนมัติทุกๆ 1 วัน (24 ชั่วโมง = 86400000 ms)
+setInterval(backupAndCleanOldWaves, 86400000);
+
+// 🟢 สั่งให้ทำงานเช็คทันทีหลังจากเปิดเซิร์ฟเวอร์ไปแล้ว 10 วินาที
+setTimeout(backupAndCleanOldWaves, 10000);
+
 app.listen(port, () =>
   console.log(`🚀 V2 Server is running on port ${port}`)
 );
