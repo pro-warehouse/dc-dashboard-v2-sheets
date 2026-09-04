@@ -919,114 +919,6 @@ app.get(/.*/, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// ==========================================
-// 🧹 ฟังก์ชัน Backup และย้ายข้อมูลที่เก่ากว่า 7 วันอัตโนมัติ
-// ==========================================
-async function backupAndCleanOldWaves() {
-  await sheetLock.acquire(); // เข้าคิวล็อก ป้องกันชนกับคำสั่งอื่น
-  try {
-    if (!isSheetsDbConfigured) return;
-    console.log('🔄 กำลังตรวจสอบและย้ายข้อมูลที่เก่ากว่า 7 วัน...');
-
-    // 1. ดึงข้อมูลทั้งหมดจาก Wave_Monitoring
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: DB_SPREADSHEET_ID,
-      range: 'Wave_Monitoring!A:ZZ',
-    });
-    
-    const rows = response.data.values;
-    if (!rows || rows.length <= 1) return; // ไม่มีข้อมูล หรือมีแค่ Header
-
-    const headers = rows[0];
-    const pickDateIdx = headers.indexOf('Planned_Pick_Date');
-    if (pickDateIdx === -1) return;
-
-    // 2. คำนวณวันที่ย้อนหลัง 7 วัน
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - 7);
-    cutoffDate.setHours(0, 0, 0, 0);
-    
-    const keepRows = [headers]; // ข้อมูลที่ยังไม่ถึง 7 วัน (เก็บไว้)
-    const backupRows = [];      // ข้อมูลที่เก่ากว่า 7 วัน (ย้าย)
-
-    // 3. คัดแยกข้อมูล
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      const dateStr = row[pickDateIdx];
-      let rowDate = null;
-      
-      if (dateStr) {
-        rowDate = new Date(dateStr);
-      }
-      
-      if (rowDate && !isNaN(rowDate.getTime()) && rowDate < cutoffDate) {
-        backupRows.push(row);
-      } else {
-        keepRows.push(row);
-      }
-    }
-
-    // 4. ถ้ามีข้อมูลต้องย้าย ให้ดำเนินการย้าย
-    if (backupRows.length > 0) {
-      // 4.1 เช็คว่ามีชีต Wave_History หรือยัง ถ้ายังให้สร้างอัตโนมัติ
-      try {
-        await sheets.spreadsheets.values.get({ spreadsheetId: DB_SPREADSHEET_ID, range: `Wave_History!A1` });
-      } catch (e) {
-        await sheets.spreadsheets.batchUpdate({
-          spreadsheetId: DB_SPREADSHEET_ID,
-          requestBody: { requests: [{ addSheet: { properties: { title: 'Wave_History' } } }] }
-        });
-        await sheets.spreadsheets.values.update({
-          spreadsheetId: DB_SPREADSHEET_ID, range: `Wave_History!A1`,
-          valueInputOption: 'USER_ENTERED', requestBody: { values: [headers] }
-        });
-        console.log('✅ สร้างชีตประวัติ Wave_History เรียบร้อย');
-      }
-
-      // 4.2 Append ข้อมูลเก่าไปต่อท้ายในชีต Wave_History
-      await sheets.spreadsheets.values.append({
-        spreadsheetId: DB_SPREADSHEET_ID,
-        range: 'Wave_History!A:A',
-        valueInputOption: 'USER_ENTERED',
-        insertDataOption: 'INSERT_ROWS',
-        requestBody: { values: backupRows },
-      });
-
-      // 4.3 ล้างข้อมูลเดิมใน Wave_Monitoring และใส่เฉพาะข้อมูลใหม่กลับเข้าไป
-      await sheets.spreadsheets.values.clear({
-        spreadsheetId: DB_SPREADSHEET_ID,
-        range: 'Wave_Monitoring!A1:ZZ',
-      });
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: DB_SPREADSHEET_ID,
-        range: 'Wave_Monitoring!A1',
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values: keepRows },
-      });
-
-      console.log(`✅ Backup และลบข้อมูลเก่าออกจากระบบจำนวน ${backupRows.length} รายการเรียบร้อย`);
-      
-      // ล้าง Cache ของเซิร์ฟเวอร์เพื่อให้ข้อมูลอัปเดต
-      waveDataCache = null; 
-      
-      // สั่งอัปเดตหน้า Dashboard และกราฟด้วยข้อมูลชุดใหม่
-      const updatedWaves = await fetchWaveDataFromSheets();
-      await updateDashboardSummary(updatedWaves);
-      await updateHourlyAllocation(updatedWaves);
-
-    } else {
-      console.log('✅ ไม่มีข้อมูลเก่าเกิน 7 วันที่ต้อง Backup');
-    }
-  } catch (err) {
-    console.error('❌ เกิดข้อผิดพลาดในการ Backup ข้อมูลเก่า:', err.message);
-  } finally {
-    sheetLock.release();
-  }
-}
-
-// 🟢 สั่งให้ทำงานอัตโนมัติทุกๆ 1 วัน (24 ชั่วโมง = 86400000 ms)
-setInterval(backupAndCleanOldWaves, 86400000);
-
 // 🟢 สั่งให้ทำงานเช็คทันทีหลังจากเปิดเซิร์ฟเวอร์ไปแล้ว 10 วินาที
 setTimeout(backupAndCleanOldWaves, 10000);
 
@@ -1055,91 +947,91 @@ app.listen(port, () =>
   console.log(`🚀 V2 Server is running on port ${port}`)
 );
 // ==========================================
-// 🧹 ฟังก์ชัน Backup แยกไฟล์ลง Google Drive ตามวันที่
+// 🧹 ฟังก์ชัน Backup แยกไฟล์ลง Google Drive ตามวันที่ (เวอร์ชั่นแก้เว็บค้าง)
 // ==========================================
 const BACKUP_FOLDER_ID = '1479C8DLEPpqFES42SCwIXKceNhCAoV2P';
 
 async function backupAndCleanOldWaves() {
-  await sheetLock.acquire();
-  try {
-    if (!isSheetsDbConfigured || !drive) return;
-    console.log('🔄 กำลังตรวจสอบและแยกไฟล์ข้อมูลที่เก่ากว่า 7 วันลง Google Drive...');
+  if (!isSheetsDbConfigured || !drive) return;
+  console.log('🔄 กำลังตรวจสอบและแยกไฟล์ข้อมูลที่เก่ากว่า 7 วันลง Google Drive...');
 
-    // 1. ดึงข้อมูลทั้งหมดจาก Wave_Monitoring
+  // 1. ดึงข้อมูลจาก Sheets (ล็อกระบบแค่ตอนอ่านข้อมูล ซึ่งใช้เวลาเสี้ยววินาที)
+  await sheetLock.acquire();
+  let rows, headers, pickDateIdx;
+  try {
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: DB_SPREADSHEET_ID,
       range: 'Wave_Monitoring!A:ZZ',
     });
+    rows = response.data.values;
+  } catch (err) {
+    console.error('❌ อ่านข้อมูลเพื่อ Backup ไม่สำเร็จ:', err.message);
+    sheetLock.release();
+    return;
+  }
+  
+  // 🟢 ปลดล็อกระบบทันที! พนักงานหน้าลานจะกดเข้าเว็บและอัปเดตงานต่อได้เลย
+  sheetLock.release(); 
+
+  if (!rows || rows.length <= 1) return;
+
+  headers = rows[0];
+  pickDateIdx = headers.indexOf('Planned_Pick_Date');
+  if (pickDateIdx === -1) return;
+
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - 7);
+  cutoffDate.setHours(0, 0, 0, 0);
+  
+  const keepRows = [headers];
+  const backupGroups = {}; 
+
+  // จัดกลุ่มข้อมูล
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const dateStr = row[pickDateIdx];
+    let rowDate = null;
     
-    const rows = response.data.values;
-    if (!rows || rows.length <= 1) return;
-
-    const headers = rows[0];
-    const pickDateIdx = headers.indexOf('Planned_Pick_Date');
-    if (pickDateIdx === -1) return;
-
-    // 2. คำนวณวันที่ย้อนหลัง 7 วัน
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - 7);
-    cutoffDate.setHours(0, 0, 0, 0);
+    if (dateStr) rowDate = new Date(dateStr);
     
-    const keepRows = [headers];
-    const backupGroups = {}; // Object สำหรับจัดกลุ่มแยกตามวันที่
-
-    // 3. คัดแยกและจัดกลุ่มข้อมูลที่เก่ากว่า 7 วันตาม Planned_Pick_Date
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      const dateStr = row[pickDateIdx];
-      let rowDate = null;
-      
-      if (dateStr) {
-        rowDate = new Date(dateStr);
-      }
-      
-      if (rowDate && !isNaN(rowDate.getTime()) && rowDate < cutoffDate) {
-         // สร้าง Key แบบ YYYY-MM-DD เพื่อใช้เป็นชื่อไฟล์และจัดกลุ่ม
-         const dKey = rowDate.toISOString().split('T')[0]; 
-         if (!backupGroups[dKey]) backupGroups[dKey] = [headers];
-         backupGroups[dKey].push(row);
-      } else {
-        // ข้อมูลใหม่ ให้เก็บไว้ในตารางหลัก
-        keepRows.push(row);
-      }
+    if (rowDate && !isNaN(rowDate.getTime()) && rowDate < cutoffDate) {
+       const dKey = rowDate.toISOString().split('T')[0]; 
+       if (!backupGroups[dKey]) backupGroups[dKey] = [headers];
+       backupGroups[dKey].push(row);
+    } else {
+      keepRows.push(row);
     }
+  }
 
-    const datesToBackup = Object.keys(backupGroups);
-    if (datesToBackup.length > 0) {
-      // 4. วนลูปสร้างไฟล์ทีละวันลงใน Google Drive
-      for (const dKey of datesToBackup) {
-        // สร้างข้อมูลรูปแบบ CSV
+  const datesToBackup = Object.keys(backupGroups);
+  if (datesToBackup.length > 0) {
+    // 2. อัปโหลดลง Drive (กระบวนการนี้ใช้เวลานาน แต่เราไม่ได้ล็อกระบบแล้ว จึงไม่กระทบหน้างาน)
+    for (const dKey of datesToBackup) {
+      try {
         const csvContent = backupGroups[dKey].map(r => 
-          r.map(cell => {
-            const cellStr = String(cell || '').replace(/"/g, '""');
-            return `"${cellStr}"`;
-          }).join(',')
+          r.map(cell => `"${String(cell || '').replace(/"/g, '""')}"`).join(',')
         ).join('\n');
 
-        // ตั้งค่าไฟล์ปลายทาง
         const fileMetadata = {
-          name: `Wave_Backup_${dKey}`, // ชื่อไฟล์ เช่น Wave_Backup_2026-08-25
+          name: `Wave_Backup_${dKey}`, 
           parents: [BACKUP_FOLDER_ID],
-          mimeType: 'application/vnd.google-apps.spreadsheet' // ให้แปลงเป็น Google Sheets
+          mimeType: 'application/vnd.google-apps.spreadsheet' 
         };
         const media = {
           mimeType: 'text/csv',
           body: csvContent
         };
 
-        // อัปโหลดไฟล์ลง Drive Folder
-        await drive.files.create({
-          resource: fileMetadata,
-          media: media,
-          fields: 'id'
-        });
+        await drive.files.create({ resource: fileMetadata, media: media, fields: 'id' });
         console.log(`✅ อัปโหลดไฟล์ Backup ของวันที่ ${dKey} ลง Google Drive สำเร็จ`);
+      } catch (uploadErr) {
+        console.error(`❌ อัปโหลด Backup วันที่ ${dKey} ไม่สำเร็จ:`, uploadErr.message);
       }
+    }
 
-      // 5. ล้างข้อมูลเดิมในตารางหลัก แล้วใส่เฉพาะข้อมูลที่ใหม่กว่า 7 วันกลับเข้าไป
+    // 3. เมื่ออัปโหลดครบ ค่อยกลับมาล็อกระบบช่วงสั้นๆ เพื่อเคลียร์ข้อมูลเก่าทิ้ง
+    await sheetLock.acquire();
+    try {
       await sheets.spreadsheets.values.clear({
         spreadsheetId: DB_SPREADSHEET_ID,
         range: 'Wave_Monitoring!A1:ZZ',
@@ -1152,24 +1044,20 @@ async function backupAndCleanOldWaves() {
       });
 
       console.log('✅ เคลียร์ข้อมูลเก่าใน Wave_Monitoring เรียบร้อย');
-      
-      // อัปเดต Cache ของระบบ
       waveDataCache = null; 
-      const updatedWaves = await fetchWaveDataFromSheets();
-      await updateDashboardSummary(updatedWaves);
-      await updateHourlyAllocation(updatedWaves);
-
-    } else {
-      console.log('✅ ไม่มีข้อมูลเก่าเกิน 7 วันที่ต้อง Backup');
+    } catch (clearErr) {
+      console.error('❌ เคลียร์ข้อมูลเก่าไม่สำเร็จ:', clearErr.message);
+    } finally {
+      sheetLock.release();
     }
-  } catch (err) {
-    console.error('❌ เกิดข้อผิดพลาดในการ Backup ลง Google Drive:', err.message);
-  } finally {
-    sheetLock.release();
+  } else {
+    console.log('✅ ไม่มีข้อมูลเก่าเกิน 7 วันที่ต้อง Backup');
   }
 }
 
-// 🟢 สั่งให้ทำงานเช็คทันทีหลังจากเปิดเซิร์ฟเวอร์ไปแล้ว 10 วินาที
-setTimeout(backupAndCleanOldWaves, 10000);
-// 🟢 สั่งให้ทำงานอัตโนมัติทุกๆ 1 วัน
+// 🟢 หน่วงเวลาให้ทำ Backup หลังจากเซิร์ฟเวอร์ตื่นไปแล้ว 5 นาที (300000 ms) 
+// เพื่อลดอาการค้างตอนที่พนักงานแห่กันเข้ามาโหลดเว็บพร้อมกัน
+setTimeout(backupAndCleanOldWaves, 300000);
+
+// 🟢 สั่งให้ทำงานอัตโนมัติทุกๆ 1 วัน (24 ชั่วโมง = 86400000 ms)
 setInterval(backupAndCleanOldWaves, 86400000);
