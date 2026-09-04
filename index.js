@@ -43,7 +43,7 @@ const sheetLock = new AsyncLock();
 const DB_SPREADSHEET_ID = '1TL-tj-BrvYM7i_wNHlA0x641_VOqfT9SLpmm2NZATOo';
 const keyFilePath = path.join(__dirname, 'key.json');
 let sheets = null;
-let drive = null; // เพิ่มตัวแปรสำหรับ Drive
+let drive = null;
 let isSheetsDbConfigured = false;
 
 if (fs.existsSync(keyFilePath)) {
@@ -51,11 +51,11 @@ if (fs.existsSync(keyFilePath)) {
     keyFile: keyFilePath,
     scopes: [
       'https://www.googleapis.com/auth/spreadsheets',
-      'https://www.googleapis.com/auth/drive' // เพิ่มสิทธิ์การเข้าถึง Drive
+      'https://www.googleapis.com/auth/drive'
     ],
   });
   sheets = google.sheets({ version: 'v4', auth: sheetsAuth });
-  drive = google.drive({ version: 'v3', auth: sheetsAuth }); // เปิดระบบ Drive API
+  drive = google.drive({ version: 'v3', auth: sheetsAuth });
   isSheetsDbConfigured = true;
   console.log('✅ โหลดการตั้งค่า Google Sheets สำเร็จ');
   initSheetsHeaders(); 
@@ -76,7 +76,6 @@ const SUMMARY_HEADERS = [
   'Load_Status', 'Load_OnTime'
 ];
 
-// 🟢 เพิ่ม Header สำหรับเก็บ Allocation รายชั่วโมง
 const HOURLY_ALLOC_HEADERS = [
   'Date', 'Hour', 'DM02_Qty', 'DP02_Qty', 'Other_Qty', 'Total_Qty'
 ];
@@ -128,7 +127,7 @@ async function initSheetsHeaders() {
     await checkAndCreateSheet('Wave_Monitoring', waveHeaders);
     await checkAndCreateSheet('System_Logs', logHeaders);
     await checkAndCreateSheet('Dashboard_Summary', SUMMARY_HEADERS);
-    await checkAndCreateSheet('Hourly_Allocation', HOURLY_ALLOC_HEADERS); // 🟢 สร้างชีตใหม่
+    await checkAndCreateSheet('Hourly_Allocation', HOURLY_ALLOC_HEADERS); 
     await checkAndCreateSheet('Settings', settingsHeaders);
 
     await loadSettingsFromSheet();
@@ -264,22 +263,19 @@ async function updateDashboardSummary(dbWaves) {
 // ==========================================
 // 📈 Hourly Allocation Logic
 // ==========================================
-// 🟢 ฟังก์ชันคำนวณและเขียนลงชีต Hourly_Allocation
 async function updateHourlyAllocation(dbWaves) {
   if (!isSheetsDbConfigured) return;
   try {
     const agg = {};
 
     dbWaves.forEach(w => {
-      // นับเฉพาะที่สถานะ Allocate = done และมีเวลาบันทึกไว้
       if (w.Status_Allocate === 'done' && w.Time_Allocate && w.Time_Allocate !== '-') {
         let tStr = String(w.Time_Allocate).trim().replace(' ', 'T');
-        if (tStr.length === 19) tStr += '+07:00'; // บังคับเป็นเวลาไทย (กรณี format YYYY-MM-DDTHH:mm:ss)
+        if (tStr.length === 19) tStr += '+07:00'; 
         
         const d = new Date(tStr);
         if (isNaN(d.getTime())) return;
 
-        // ดึงวันที่ (YYYY-MM-DD) และ ชั่วโมง (HH) โดยยึดโซนเวลาไทย
         const dateStr = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
         const hourStr = d.toLocaleTimeString('en-GB', { hour: '2-digit', timeZone: 'Asia/Bangkok' }).slice(0, 2);
 
@@ -299,7 +295,6 @@ async function updateHourlyAllocation(dbWaves) {
       }
     });
 
-    // เรียงคีย์ตามวันที่และเวลาจากเก่าไปใหม่
     const sortedKeys = Object.keys(agg).sort((a, b) => a.localeCompare(b));
     const sheetData = sortedKeys.map(k => [
       agg[k].Date, agg[k].Hour, agg[k].DM02_Qty, agg[k].DP02_Qty, agg[k].Other_Qty, agg[k].Total_Qty
@@ -463,7 +458,7 @@ app.post('/api/waves/update-status', async (req, res) => {
       return letter;
     };
 
-    let triggerAllocationUpdate = false; // เช็คว่ามีการแก้ Allocate ไหม
+    let triggerAllocationUpdate = false; 
 
     payload.forEach((waveUpdate) => {
       const targetWaveId = standardizeWaveId(waveUpdate.id);
@@ -487,7 +482,6 @@ app.post('/api/waves/update-status', async (req, res) => {
             
             if (rowIndex > 1) { 
               (waveUpdate.steps || []).forEach(step => {
-                // 🟢 Mark flag ให้รู้ว่ามีแก้ Allocate
                 if (step.key === 'allocate') triggerAllocationUpdate = true;
 
                 const capKey = step.key.charAt(0).toUpperCase() + step.key.slice(1);
@@ -635,7 +629,6 @@ app.post('/api/verify-employee', async (req, res) => {
 app.get('/api/version', (req, res) => res.json({ version: '1.3.1' }));
 app.get('/api/settings', (req, res) => res.json(defaultSettings));
 
-// 🟢 อัปเดต Settings แล้วเซฟลงชีตอัตโนมัติ
 app.post('/api/settings/save', async (req, res) => {
   try {
     const newSettings = req.body;
@@ -645,10 +638,8 @@ app.post('/api/settings/save', async (req, res) => {
     if (newSettings.beans !== undefined) defaultSettings.beans = newSettings.beans;
     if (newSettings.maxLimits !== undefined) defaultSettings.maxLimits = newSettings.maxLimits;
 
-    // ค้นหาใน /api/settings/save และแก้ไขปิดคำสั่งไว้แบบนี้ครับ:
-// fs.writeFileSync(path.join(__dirname, 'settings.json'), JSON.stringify(defaultSettings, null, 4), 'utf8');
-await saveSettingsToSheet();
-res.json({ success: true });
+    await saveSettingsToSheet();
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Error' });
   }
@@ -661,7 +652,6 @@ app.post('/api/waves/bulk-insert', async (req, res) => {
     if (!sheetData || sheetData.length === 0) return res.status(400).json({ success: false, message: 'ไม่พบข้อมูล' });
 
     if (isSheetsDbConfigured) {
-      // 1. ดึงข้อมูลเดิมมาเช็คก่อน
       const response = await sheets.spreadsheets.values.get({
         spreadsheetId: DB_SPREADSHEET_ID,
         range: 'Wave_Monitoring!A:ZZ',
@@ -680,13 +670,12 @@ app.post('/api/waves/bulk-insert', async (req, res) => {
         return letter;
       };
 
-      // 2. สร้างแผนที่ (Map) เก็บเลขบรรทัดของ Wave ที่มีอยู่แล้ว
       const existingWaves = {};
       if (headers.length > 0) {
         const waveIdx = headers.indexOf('Wave_Number');
         rows.forEach((r, index) => {
           if (index > 0 && r[waveIdx]) {
-            existingWaves[standardizeWaveId(r[waveIdx])] = index + 1; // เก็บอ้างอิงบรรทัด
+            existingWaves[standardizeWaveId(r[waveIdx])] = index + 1; 
           }
         });
       }
@@ -694,20 +683,16 @@ app.post('/api/waves/bulk-insert', async (req, res) => {
       const updateData = [];
       const newRowsToAdd = [];
 
-      // 3. คัดแยกข้อมูลว่าอันไหนต้อง "อัปเดต" อันไหนต้อง "เพิ่มใหม่"
       sheetData.forEach(row => {
         const waveId = standardizeWaveId(row['Wave_Number']);
         const existingRowIndex = existingWaves[waveId];
 
         if (existingRowIndex) {
-          // 🟢 มีข้อมูลอยู่แล้ว -> เตรียมอัปเดตข้อมูลทับบรรทัดเดิม
           headers.forEach((header, i) => {
-            // ให้อัปโหลดไฟล์มาแก้ Booking และ Owner ได้อิสระ
-const protectedColumns = [];
+            const protectedColumns = [];
             
-            // เพิ่มเงื่อนไขเช็คคำนำหน้า (startsWith) เพื่อบล็อกคอลัมน์สถานะ, เวลา และผู้ใช้งานทั้งหมด
             if (protectedColumns.includes(header) || header.startsWith('Status_') || header.startsWith('Time_') || header.startsWith('User_') || header.includes('Timestamp')) {
-              return; // ข้ามการทำงานรอบนี้ เพื่อไม่ให้เกิดผลกระทบกับข้อมูลหน้างานเดิมเด็ดขาด
+              return; 
             }
 
             if (row[header] !== undefined && row[header] !== null) {
@@ -718,13 +703,11 @@ const protectedColumns = [];
             }
           });
         } else {
-          // 🔵 ยังไม่มีข้อมูล -> เตรียมเพิ่มบรรทัดใหม่
           const newRowData = headers.map(header => row[header] !== undefined && row[header] !== null ? String(row[header]) : '');
           newRowsToAdd.push(newRowData);
         }
       });
 
-      // 4. สั่งอัปเดตบรรทัดเดิมที่พบ (ถ้ามี)
       if (updateData.length > 0) {
         await sheets.spreadsheets.values.batchUpdate({
           spreadsheetId: DB_SPREADSHEET_ID,
@@ -732,7 +715,6 @@ const protectedColumns = [];
         });
       }
 
-      // 5. สั่งเพิ่มข้อมูลบรรทัดใหม่ (ถ้ามี)
       if (newRowsToAdd.length > 0) {
         await sheets.spreadsheets.values.append({
           spreadsheetId: DB_SPREADSHEET_ID,
@@ -742,7 +724,6 @@ const protectedColumns = [];
         });
       }
 
-      // 6. อัปเดต Summary และกราฟให้เป็นปัจจุบัน
       const updatedWaves = await fetchWaveDataFromSheets();
       await updateDashboardSummary(updatedWaves);
       await updateHourlyAllocation(updatedWaves);
@@ -836,7 +817,6 @@ app.post('/api/wms-204/bulk', async (req, res) => {
         },
       });
       
-      // 🟢 ดึงข้อมูลใหม่ล่าสุดมาคำนวณและบันทึกชีต Hourly ทันที!
       const updatedWaves = await fetchWaveDataFromSheets();
       await updateHourlyAllocation(updatedWaves);
 
@@ -863,7 +843,7 @@ app.post('/api/waves/delete-id', async (req, res) => {
     if (dbWaves.length !== originalLength && isSheetsDbConfigured) {
        await writeSheet('Wave_Monitoring', dbWaves, WAVES_HEADERS);
        await updateDashboardSummary(dbWaves);
-       await updateHourlyAllocation(dbWaves); // 🟢 อัปเดต Hourly ด้วย
+       await updateHourlyAllocation(dbWaves); 
        waveDataCache = null;
     }
     res.json({ success: true });
@@ -886,7 +866,7 @@ app.post('/api/waves/delete', async (req, res) => {
     if (dbWaves.length !== originalLength && isSheetsDbConfigured) {
        await writeSheet('Wave_Monitoring', dbWaves, WAVES_HEADERS);
        await updateDashboardSummary(dbWaves);
-       await updateHourlyAllocation(dbWaves); // 🟢 อัปเดต Hourly ด้วย
+       await updateHourlyAllocation(dbWaves); 
        waveDataCache = null;
     }
     res.json({ success: true });
@@ -918,9 +898,6 @@ app.post('/api/sync-tms-sheet', async (req, res) => {
 app.get(/.*/, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
-
-// 🟢 สั่งให้ทำงานเช็คทันทีหลังจากเปิดเซิร์ฟเวอร์ไปแล้ว 10 วินาที
-setTimeout(backupAndCleanOldWaves, 10000);
 
 // ==========================================
 // 📊 อัปเดต Dashboard ลงชีตทุก 1 ชั่วโมง (ประหยัดทรัพยากร)
@@ -965,8 +942,9 @@ app.get('/api/clear-bot-trash', async (req, res) => {
 app.listen(port, () =>
   console.log(`🚀 V2 Server is running on port ${port}`)
 );
+
 // ==========================================
-// 🧹 ฟังก์ชัน Backup แยกไฟล์ลง Google Drive ตามวันที่ (เวอร์ชั่นแก้เว็บค้าง)
+// 🧹 ฟังก์ชัน Backup แยกไฟล์ลง Google Drive ตามวันที่ (เวอร์ชั่นแก้เว็บค้าง + มีเซฟตี้)
 // ==========================================
 const BACKUP_FOLDER_ID = '1479C8DLEPpqFES42SCwIXKceNhCAoV2P';
 
@@ -974,7 +952,7 @@ async function backupAndCleanOldWaves() {
   if (!isSheetsDbConfigured || !drive) return;
   console.log('🔄 กำลังตรวจสอบและแยกไฟล์ข้อมูลที่เก่ากว่า 7 วันลง Google Drive...');
 
-  // 1. ดึงข้อมูลจาก Sheets (ล็อกระบบแค่ตอนอ่านข้อมูล ซึ่งใช้เวลาเสี้ยววินาที)
+  // 1. ดึงข้อมูลจาก Sheets
   await sheetLock.acquire();
   let rows, headers, pickDateIdx;
   try {
@@ -989,7 +967,6 @@ async function backupAndCleanOldWaves() {
     return;
   }
   
-  // 🟢 ปลดล็อกระบบทันที! พนักงานหน้าลานจะกดเข้าเว็บและอัปเดตงานต่อได้เลย
   sheetLock.release(); 
 
   if (!rows || rows.length <= 1) return;
@@ -1024,7 +1001,10 @@ async function backupAndCleanOldWaves() {
 
   const datesToBackup = Object.keys(backupGroups);
   if (datesToBackup.length > 0) {
-    // 2. อัปโหลดลง Drive (กระบวนการนี้ใช้เวลานาน แต่เราไม่ได้ล็อกระบบแล้ว จึงไม่กระทบหน้างาน)
+    
+    let allUploadsSuccess = true; 
+
+    // 2. อัปโหลดลง Drive 
     for (const dKey of datesToBackup) {
       try {
         const csvContent = backupGroups[dKey].map(r => 
@@ -1045,38 +1025,43 @@ async function backupAndCleanOldWaves() {
         console.log(`✅ อัปโหลดไฟล์ Backup ของวันที่ ${dKey} ลง Google Drive สำเร็จ`);
       } catch (uploadErr) {
         console.error(`❌ อัปโหลด Backup วันที่ ${dKey} ไม่สำเร็จ:`, uploadErr.message);
+        allUploadsSuccess = false; 
       }
     }
 
-    // 3. เมื่ออัปโหลดครบ ค่อยกลับมาล็อกระบบช่วงสั้นๆ เพื่อเคลียร์ข้อมูลเก่าทิ้ง
-    await sheetLock.acquire();
-    try {
-      await sheets.spreadsheets.values.clear({
-        spreadsheetId: DB_SPREADSHEET_ID,
-        range: 'Wave_Monitoring!A1:ZZ',
-      });
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: DB_SPREADSHEET_ID,
-        range: 'Wave_Monitoring!A1',
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values: keepRows },
-      });
+    // 3. ระบบเซฟตี้: ลบข้อมูลเก่าทิ้ง ก็ต่อเมื่ออัปโหลดผ่านหมดเท่านั้น
+    if (allUploadsSuccess === true) {
+      await sheetLock.acquire();
+      try {
+        await sheets.spreadsheets.values.clear({
+          spreadsheetId: DB_SPREADSHEET_ID,
+          range: 'Wave_Monitoring!A1:ZZ',
+        });
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: DB_SPREADSHEET_ID,
+          range: 'Wave_Monitoring!A1',
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: keepRows },
+        });
 
-      console.log('✅ เคลียร์ข้อมูลเก่าใน Wave_Monitoring เรียบร้อย');
-      waveDataCache = null; 
-    } catch (clearErr) {
-      console.error('❌ เคลียร์ข้อมูลเก่าไม่สำเร็จ:', clearErr.message);
-    } finally {
-      sheetLock.release();
+        console.log('✅ เคลียร์ข้อมูลเก่าใน Wave_Monitoring เรียบร้อย');
+        waveDataCache = null; 
+      } catch (clearErr) {
+        console.error('❌ เคลียร์ข้อมูลเก่าไม่สำเร็จ:', clearErr.message);
+      } finally {
+        sheetLock.release();
+      }
+    } else {
+      console.log('⚠️ ยกเลิกการลบข้อมูลเก่าใน Sheet เนื่องจากอัปโหลดไฟล์ลง Drive ไม่สำเร็จ');
     }
+
   } else {
     console.log('✅ ไม่มีข้อมูลเก่าเกิน 7 วันที่ต้อง Backup');
   }
-}
+} 
 
-// 🟢 หน่วงเวลาให้ทำ Backup หลังจากเซิร์ฟเวอร์ตื่นไปแล้ว 5 นาที (300000 ms) 
-// เพื่อลดอาการค้างตอนที่พนักงานแห่กันเข้ามาโหลดเว็บพร้อมกัน
+// 🟢 หน่วงเวลาให้ทำ Backup หลังจากเปิดเซิร์ฟเวอร์ 5 นาที
 setTimeout(backupAndCleanOldWaves, 300000);
 
-// 🟢 สั่งให้ทำงานอัตโนมัติทุกๆ 1 วัน (24 ชั่วโมง = 86400000 ms)
+// 🟢 สั่งให้ทำงานอัตโนมัติทุกๆ 1 วัน
 setInterval(backupAndCleanOldWaves, 86400000);
