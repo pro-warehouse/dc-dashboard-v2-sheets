@@ -3332,7 +3332,6 @@ if (data.shifts) { this.settings.shifts = data.shifts; localStorage.setItem('dc_
                 if (newRow['Planned_Load_Time']) newRow['Planned_Load_Time'] = this.normalizeImportPlanTime(newRow['Planned_Load_Time']);
                 if (newRow['Planned_Pick_Time']) newRow['Planned_Pick_Time'] = this.normalizeImportPlanTime(newRow['Planned_Pick_Time']);
                 newRow['Is_HUB'] = newRow['Is_HUB'] === 'Y' || newRow['Is_HUB'] === 'y';
-                delete newRow['License_Plate'];
                 let tq = newRow['Total_Qty'] !== null && newRow['Total_Qty'] !== undefined ? newRow['Total_Qty'] : newRow['Total Qty'];
                 newRow['Total_Qty'] = this.parseNumericQty(tq);
                 delete newRow['Total Qty'];
