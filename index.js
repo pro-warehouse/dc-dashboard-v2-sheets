@@ -1136,10 +1136,3 @@ const datesToBackup = Object.keys(backupGroups);
     console.log('✅ ไม่มีข้อมูลเก่าเกิน 7 วันที่ต้อง Backup');
   }
 }
-
-// 🟢 หน่วงเวลาให้ทำ Backup หลังจากเซิร์ฟเวอร์ตื่นไปแล้ว 5 นาที (300000 ms) 
-// เพื่อลดอาการค้างตอนที่พนักงานแห่กันเข้ามาโหลดเว็บพร้อมกัน
-setTimeout(backupAndCleanOldWaves, 300000);
-
-// 🟢 สั่งให้ทำงานอัตโนมัติทุกๆ 1 วัน (24 ชั่วโมง = 86400000 ms)
-setInterval(backupAndCleanOldWaves, 86400000);
