@@ -2349,7 +2349,7 @@ if (data.shifts) { this.settings.shifts = data.shifts; localStorage.setItem('dc_
             }, 15000);
             this.fetchDockStatus();
             setInterval(() => this.fetchDockStatus(), 15000);
-            setInterval(() => this.refreshScannerStatuses(true), 10000);
+            // setInterval(() => this.refreshScannerStatuses(true), 10000);
           }
         },
 
@@ -3935,13 +3935,8 @@ if (data.shifts) { this.settings.shifts = data.shifts; localStorage.setItem('dc_
         },
 
         confirmPrintLPN(wave) {
-          const statusObj = this.scannerStatuses[wave.id];
-          const statusText = statusObj ? statusObj.status : 'ยังไม่ได้โหลด';
-          const scanned = statusObj ? statusObj.scannedCount : 0;
-          const total = statusObj ? statusObj.totalCount : 0;
-          if (statusText !== 'นับเสร็จแล้ว') {
-            Swal.fire({ title: '⚠️ ยังสแกนนับกล่องไม่เสร็จสิ้น!', html: `Wave: <b>${wave.id}</b> มีการสแกนไปแล้ว <b>${scanned}/${total}</b> กล่อง<br>สถานะการสแกนปัจจุบัน: <b class="text-rose-600">${statusText}</b><br><br><span class="text-xs text-slate-500">กรุณาตรวจสอบว่าแน่ใจที่จะพิมพ์ LPN ก่อนขั้นตอนสแกนเสร็จสิ้นหรือไม่</span>`, icon: 'warning', showCancelButton: true, confirmButtonText: 'ยืนยันพิมพ์ LPN เลย (Bypass)', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#e11d48', cancelButtonColor: '#94a3b8' }).then((result) => { if (result.isConfirmed) this.handleActionClick(wave.rowKey, 'print'); });
-          } else this.handleActionClick(wave.rowKey, 'print');
+          // ข้ามการเช็ค Scanner ไปเลย แล้วสั่งอัปเดตสถานะทันที
+          this.handleActionClick(wave.rowKey, 'print');
         },
 
         handleActionClick(rKey, k) {
