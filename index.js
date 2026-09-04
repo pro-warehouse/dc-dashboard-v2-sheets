@@ -569,11 +569,8 @@ app.post('/api/waves/update-status', async (req, res) => {
         },
       });
 
-      // 📊 ซิงค์ Summary กลับ
+      // 🟢 ดึงข้อมูลใหม่ล่าสุดมาคำนวณและบันทึกชีต Hourly ทันที!
       const updatedWaves = await fetchWaveDataFromSheets();
-      await updateDashboardSummary(updatedWaves);
-
-      // 🟢 บังคับคำนวณกราฟ Hourly ใหม่ทุกครั้ง ป้องกันยอดตกหล่น
       await updateHourlyAllocation(updatedWaves);
 
       waveDataCache = null; 
@@ -1032,6 +1029,27 @@ setInterval(backupAndCleanOldWaves, 86400000);
 
 // 🟢 สั่งให้ทำงานเช็คทันทีหลังจากเปิดเซิร์ฟเวอร์ไปแล้ว 10 วินาที
 setTimeout(backupAndCleanOldWaves, 10000);
+
+// ==========================================
+// 📊 อัปเดต Dashboard ลงชีตทุก 1 ชั่วโมง (ประหยัดทรัพยากร)
+// ==========================================
+setInterval(async () => {
+  await sheetLock.acquire();
+  try {
+    if (isSheetsDbConfigured) {
+      console.log('📊 กำลังอัปเดตข้อมูล Dashboard ลง Sheets ประจำชั่วโมง...');
+      const currentWaves = await fetchWaveDataFromSheets();
+      await updateDashboardSummary(currentWaves);
+      await updateHourlyAllocation(currentWaves);
+      waveDataCache = null; // เคลียร์แคชให้ดึงใหม่
+      console.log('✅ อัปเดต Dashboard เสร็จสิ้น');
+    }
+  } catch (err) {
+    console.error('❌ เกิดข้อผิดพลาดในการอัปเดต Dashboard ประจำชั่วโมง:', err.message);
+  } finally {
+    sheetLock.release();
+  }
+}, 60 * 60 * 1000); // 60 * 60 * 1000 = 1 ชั่วโมง
 
 app.listen(port, () =>
   console.log(`🚀 V2 Server is running on port ${port}`)
