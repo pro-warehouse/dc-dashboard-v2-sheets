@@ -1073,6 +1073,69 @@ async function backupAndCleanOldWaves() {
     console.log('✅ ไม่มีข้อมูลเก่าเกิน 7 วันที่ต้อง Backup');
   }
 }
+const datesToBackup = Object.keys(backupGroups);
+  if (datesToBackup.length > 0) {
+    
+    // 🟢 1. สร้างตัวแปรเช็คสถานะการอัปโหลด
+    let allUploadsSuccess = true; 
+
+    // 2. อัปโหลดลง Drive 
+    for (const dKey of datesToBackup) {
+      try {
+        const csvContent = backupGroups[dKey].map(r => 
+          r.map(cell => `"${String(cell || '').replace(/"/g, '""')}"`).join(',')
+        ).join('\n');
+
+        const fileMetadata = {
+          name: `Wave_Backup_${dKey}`, 
+          parents: [BACKUP_FOLDER_ID],
+          mimeType: 'application/vnd.google-apps.spreadsheet' 
+        };
+        const media = {
+          mimeType: 'text/csv',
+          body: csvContent
+        };
+
+        await drive.files.create({ resource: fileMetadata, media: media, fields: 'id' });
+        console.log(`✅ อัปโหลดไฟล์ Backup ของวันที่ ${dKey} ลง Google Drive สำเร็จ`);
+      } catch (uploadErr) {
+        console.error(`❌ อัปโหลด Backup วันที่ ${dKey} ไม่สำเร็จ:`, uploadErr.message);
+        // 🟢 2. ถ้ามี Error แม้แต่ไฟล์เดียว ให้เปลี่ยนสถานะเป็น false ทันที
+        allUploadsSuccess = false; 
+      }
+    }
+
+    // 🟢 3. ระบบเซฟตี้: จะลบข้อมูลเก่าทิ้ง ก็ต่อเมื่ออัปโหลดผ่านหมดทุกไฟล์เท่านั้น!
+    if (allUploadsSuccess === true) {
+      await sheetLock.acquire();
+      try {
+        await sheets.spreadsheets.values.clear({
+          spreadsheetId: DB_SPREADSHEET_ID,
+          range: 'Wave_Monitoring!A1:ZZ',
+        });
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: DB_SPREADSHEET_ID,
+          range: 'Wave_Monitoring!A1',
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: keepRows },
+        });
+
+        console.log('✅ เคลียร์ข้อมูลเก่าใน Wave_Monitoring เรียบร้อย');
+        waveDataCache = null; 
+      } catch (clearErr) {
+        console.error('❌ เคลียร์ข้อมูลเก่าไม่สำเร็จ:', clearErr.message);
+      } finally {
+        sheetLock.release();
+      }
+    } else {
+      // 🟢 4. ถ้าอัปโหลดไม่ผ่าน จะไม่ลบข้อมูลในชีต และแจ้งเตือนไว้
+      console.log('⚠️ ยกเลิกการลบข้อมูลเก่าใน Sheet เนื่องจากอัปโหลดไฟล์ลง Drive ไม่สำเร็จ');
+    }
+
+  } else {
+    console.log('✅ ไม่มีข้อมูลเก่าเกิน 7 วันที่ต้อง Backup');
+  }
+}
 
 // 🟢 หน่วงเวลาให้ทำ Backup หลังจากเซิร์ฟเวอร์ตื่นไปแล้ว 5 นาที (300000 ms) 
 // เพื่อลดอาการค้างตอนที่พนักงานแห่กันเข้ามาโหลดเว็บพร้อมกัน
