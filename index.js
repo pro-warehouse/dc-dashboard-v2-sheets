@@ -943,6 +943,25 @@ setInterval(async () => {
   }
 }, 60 * 60 * 1000); // 60 * 60 * 1000 = 1 ชั่วโมง
 
+// ==========================================
+// 🗑️ API พิเศษ: สั่งล้างถังขยะของ Service Account (Bot)
+// ==========================================
+app.get('/api/clear-bot-trash', async (req, res) => {
+  try {
+    if (!drive) return res.json({ success: false, message: 'Google Drive API ยังไม่ได้เชื่อมต่อ' });
+    
+    // สั่งให้บอทล้างถังขยะของตัวเอง
+    await drive.files.emptyTrash();
+    
+    res.json({ 
+      success: true, 
+      message: 'ล้างถังขยะของบอทเรียบร้อยแล้ว! พื้นที่กลับมาว่างพร้อมใช้งานครับ' 
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาด: ' + err.message });
+  }
+});
+
 app.listen(port, () =>
   console.log(`🚀 V2 Server is running on port ${port}`)
 );
