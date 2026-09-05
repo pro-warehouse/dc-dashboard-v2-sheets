@@ -274,8 +274,9 @@
       <div class="flex items-center gap-4">
         <button @click="fetchDataFromDB(true); fetchLogsFromDB();"
           class="flex items-center gap-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-700 px-3 py-1.5 rounded-full text-[10px] font-semibold border border-indigo-200 transition-all shadow-sm uppercase tracking-wider active:scale-95">
-          <i class="fas fa-sync-alt" :class="(isLoading || isDashboardLoading) ? 'fa-spin' : ''"></i><span
-            class="hidden md:inline">Refresh</span>
+          <i class="fas fa-sync-alt" :class="(isLoading || isDashboardLoading || loadingProgress > 0) ? 'fa-spin' : ''"></i>
+          <!-- 🟢 แสดงข้อความ % ตามสถานะการโหลด -->
+          <span class="hidden md:inline" x-text="loadingProgress > 0 && loadingProgress < 100 ? `โหลด ${loadingProgress}%` : (loadingProgress === 100 ? 'เสร็จสิ้น 100%' : 'Refresh')"></span>
         </button>
         <div x-show="currentUser" @click="isGuest ? login() : switchUser()"
           class="flex items-center gap-3 bg-white hover:bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-full no-print shadow-md cursor-pointer transition-all active:scale-95 group">
@@ -2150,6 +2151,7 @@
         waveStats: { pending: 0, doing: 0, done: 0 },
         allocationStats: { totalPieces: 0, dm02: 0, dp02: 0, other: 0, pendingPieces: 0 },
         isFetchingWaves: false,
+        loadingProgress: 0, // 🟢 เพิ่มตัวแปรนี้สำหรับเก็บ % การโหลด
         lastLogsFetchAt: 0,
         lastMetaFetchAt: 0,
         scannerStatuses: {},
@@ -2489,17 +2491,60 @@ if (data.shifts) { this.settings.shifts = data.shifts; localStorage.setItem('dc_
           ['status', 'ts', 'time', 'user', 'doing_ts', 'undo_ts', 'local_ts'].forEach(s => localStorage.removeItem(`wave_${waveId}_${stepKey}_${s}`));
         },
 
-        fetchDataFromDB(isSilent = false) {
+        async fetchDataFromDB(isSilent = false) {
           if (this.isFetchingWaves) return;
           this.isFetchingWaves = true;
+          this.loadingProgress = 1; // เริ่มกระพริบที่ 1%
+
           if (!isSilent && this.waves.length === 0) this.isLoading = true;
           let activeScrollArea = this.currentView === 'transporter' ? document.getElementById('transporterScrollArea') : document.getElementById('mainScrollArea');
           if (activeScrollArea) this.savedScrollPos = activeScrollArea.scrollTop;
 
-          fetch('/api/waves/live?t=' + Date.now()).then((res) => res.json()).then((data) => this.processDBData(data, false, isSilent)).catch((err) => {
+          try {
+            const response = await fetch('/api/waves/live?t=' + Date.now());
+            if (!response.ok) throw new Error('API Error');
+
+            // ดึงขนาดข้อมูลทั้งหมดเพื่อใช้คำนวณ %
+            const contentLength = response.headers.get('content-length');
+            const total = contentLength ? parseInt(contentLength, 10) : 0;
+            let loaded = 0;
+
+            const reader = response.body.getReader();
+            const chunks = [];
+
+            // วนลูปอ่านข้อมูลแบบ Stream (ก้อนต่อก้อน)
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              if (value) {
+                chunks.push(value);
+                loaded += value.length;
+                if (total > 0) {
+                  this.loadingProgress = Math.floor((loaded / total) * 100);
+                } else {
+                  // Fallback กรณีเซิร์ฟเวอร์ไม่ได้ส่ง Content-Length กลับมา
+                  this.loadingProgress = Math.min(95, this.loadingProgress + Math.floor(Math.random() * 10));
+                }
+              }
+            }
+
+            this.loadingProgress = 100; // เต็ม 100%
+
+            // ประกอบก้อนข้อมูล (Chunks) กลับมาเป็น JSON
+            const blob = new Blob(chunks);
+            const text = await blob.text();
+            const data = JSON.parse(text);
+
+            this.processDBData(data, false, isSilent);
+
+          } catch (err) {
             this.isLoading = false;
             if (!isSilent) Swal.fire({ title: 'เซิร์ฟเวอร์ขัดข้อง!', text: String(err), icon: 'error' });
-          }).finally(() => { this.isFetchingWaves = false; });
+          } finally {
+            this.isFetchingWaves = false;
+            // โชว์เลข 100% ค้างไว้ 1 วินาทีก่อนให้ปุ่มกลับไปเป็นคำว่า Refresh
+            setTimeout(() => { this.loadingProgress = 0; }, 1000); 
+          }
         },
 
         getMockData() { return []; },
