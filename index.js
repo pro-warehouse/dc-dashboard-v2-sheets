@@ -980,13 +980,17 @@ app.listen(port, () =>
 );
 
 // ==========================================
-// 🧹 ฟังก์ชัน Backup แยกไฟล์ลง Google Drive ตามวันที่ (เวอร์ชั่นแก้เว็บค้าง + มีเซฟตี้)
+// 🧹 ฟังก์ชัน Backup แยกข้อมูลตามวันที่ (เวอร์ชั่นแก้เว็บค้าง + มีเซฟตี้)
+// 🩹 FIX: เปลี่ยนจากสร้างไฟล์ใหม่ใน Google Drive (Service Account ไม่มีโควต้าของตัวเอง
+// ทำให้เจอ "storage quota exceeded" เสมอ) → เขียนเป็นแท็บใหม่ในสเปรดชีตสำรองที่มีคนเป็นเจ้าของอยู่แล้ว
+// (แชร์สิทธิ์ Editor ให้บอท) ซึ่งไม่กินโควต้า Drive ของบอทเลย
 // ==========================================
-const BACKUP_FOLDER_ID = '1479C8DLEPpqFES42SCwIXKceNhCAoV2P';
+// ⚠️ ต้องแทนที่ค่านี้ด้วย Spreadsheet ID ของสเปรดชีตสำรองที่สร้างขึ้น (ดูจาก URL ช่วงหลัง /d/ ก่อน /edit)
+const BACKUP_SPREADSHEET_ID = '1nJLuSDrmY1HhRNuQ6ga0WsIoGtx6uL_ITPEY8ohVGKc';
 
 async function backupAndCleanOldWaves() {
-  if (!isSheetsDbConfigured || !drive) return;
-  console.log('🔄 กำลังตรวจสอบและแยกไฟล์ข้อมูลที่เก่ากว่า 7 วันลง Google Drive...');
+  if (!isSheetsDbConfigured) return;
+  console.log('🔄 กำลังตรวจสอบและแยกข้อมูลที่เก่ากว่า 7 วันไปเก็บที่สเปรดชีตสำรอง...');
 
   // 1. ดึงข้อมูลจาก Sheets
   await sheetLock.acquire();
@@ -1038,31 +1042,30 @@ async function backupAndCleanOldWaves() {
   const datesToBackup = Object.keys(backupGroups);
   if (datesToBackup.length > 0) {
     
-    let allUploadsSuccess = true; 
+    let allUploadsSuccess = true;
 
-    // 2. อัปโหลดลง Drive 
+    // 2. เขียนแท็บใหม่ลงสเปรดชีตสำรอง (แทนการสร้างไฟล์ใหม่ใน Drive)
     for (const dKey of datesToBackup) {
+      const tabName = `Backup_${dKey}`;
       try {
-        const csvContent = backupGroups[dKey].map(r => 
-          r.map(cell => `"${String(cell || '').replace(/"/g, '""')}"`).join(',')
-        ).join('\n');
+        try {
+          await sheets.spreadsheets.batchUpdate({
+            spreadsheetId: BACKUP_SPREADSHEET_ID,
+            requestBody: { requests: [{ addSheet: { properties: { title: tabName } } }] }
+          });
+        } catch (e) {} // มีแท็บนี้อยู่แล้ว (เช่นรันซ้ำ) ก็ข้ามไปเขียนทับข้อมูลต่อได้เลย
 
-        const fileMetadata = {
-          name: `Wave_Backup_${dKey}`, 
-          parents: [BACKUP_FOLDER_ID],
-          mimeType: 'application/vnd.google-apps.spreadsheet' 
-        };
-        const media = {
-          mimeType: 'text/csv',
-          body: csvContent
-        };
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: BACKUP_SPREADSHEET_ID,
+          range: `${tabName}!A1`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: backupGroups[dKey] },
+        });
 
-        // supportsAllDrives: true จำเป็นถ้า BACKUP_FOLDER_ID ย้ายไปอยู่ใน Shared Drive (แก้ปัญหา storage quota exceeded ของ Service Account)
-        await drive.files.create({ resource: fileMetadata, media: media, fields: 'id', supportsAllDrives: true });
-        console.log(`✅ อัปโหลดไฟล์ Backup ของวันที่ ${dKey} ลง Google Drive สำเร็จ`);
+        console.log(`✅ บันทึก Backup ของวันที่ ${dKey} ลงสเปรดชีตสำรองสำเร็จ`);
       } catch (uploadErr) {
-        console.error(`❌ อัปโหลด Backup วันที่ ${dKey} ไม่สำเร็จ:`, uploadErr.message);
-        allUploadsSuccess = false; 
+        console.error(`❌ บันทึก Backup วันที่ ${dKey} ไม่สำเร็จ:`, uploadErr.message);
+        allUploadsSuccess = false;
       }
     }
 
