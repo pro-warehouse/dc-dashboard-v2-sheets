@@ -377,7 +377,7 @@ async function fetchWaveDataFromSheets() {
   try {
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: DB_SPREADSHEET_ID,
-      range: 'Wave_Monitoring!A:ZZ',
+      range: 'Wave_Monitoring!A:AT',
     });
     const rows = response.data.values;
     if (!rows || rows.length === 0) return [];
@@ -438,7 +438,7 @@ app.post('/api/waves/update-status', async (req, res) => {
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: DB_SPREADSHEET_ID,
-      range: 'Wave_Monitoring!A:ZZ',
+      range: 'Wave_Monitoring!A:AT',
     });
     
     const rows = response.data.values;
@@ -654,7 +654,7 @@ app.post('/api/waves/bulk-insert', async (req, res) => {
     if (isSheetsDbConfigured) {
       const response = await sheets.spreadsheets.values.get({
         spreadsheetId: DB_SPREADSHEET_ID,
-        range: 'Wave_Monitoring!A:ZZ',
+        range: 'Wave_Monitoring!A:AT',
       });
       
       const rows = response.data.values || [];
@@ -757,7 +757,7 @@ app.post('/api/wms-204/bulk', async (req, res) => {
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: DB_SPREADSHEET_ID,
-      range: 'Wave_Monitoring!A:ZZ',
+      range: 'Wave_Monitoring!A:AT',
     });
     
     const rows = response.data.values;
@@ -994,7 +994,7 @@ async function backupAndCleanOldWaves() {
   try {
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: DB_SPREADSHEET_ID,
-      range: 'Wave_Monitoring!A:ZZ',
+      range: 'Wave_Monitoring!A:AT',
     });
     rows = response.data.values;
   } catch (err) {
@@ -1057,7 +1057,8 @@ async function backupAndCleanOldWaves() {
           body: csvContent
         };
 
-        await drive.files.create({ resource: fileMetadata, media: media, fields: 'id' });
+        // supportsAllDrives: true จำเป็นถ้า BACKUP_FOLDER_ID ย้ายไปอยู่ใน Shared Drive (แก้ปัญหา storage quota exceeded ของ Service Account)
+        await drive.files.create({ resource: fileMetadata, media: media, fields: 'id', supportsAllDrives: true });
         console.log(`✅ อัปโหลดไฟล์ Backup ของวันที่ ${dKey} ลง Google Drive สำเร็จ`);
       } catch (uploadErr) {
         console.error(`❌ อัปโหลด Backup วันที่ ${dKey} ไม่สำเร็จ:`, uploadErr.message);
