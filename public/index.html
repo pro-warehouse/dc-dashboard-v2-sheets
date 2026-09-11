@@ -2357,8 +2357,8 @@ if (data.shifts) { this.settings.shifts = data.shifts; localStorage.setItem('dc_
                 this.now = new Date();
                 this.fetchDataFromDB(true);
                 const now = Date.now();
-                if (this.currentView === 'logs' || now - this.lastLogsFetchAt > 30000) this.fetchLogsFromDB();
-                if (now - this.lastMetaFetchAt > 60000) { this.fetchLast204Time(); this.checkAppVersion(); this.lastMetaFetchAt = now; }
+                if (this.currentView === 'logs' || now - this.lastLogsFetchAt > 1800000) this.fetchLogsFromDB(); // เดิม 30 วิ -> 30 นาที (ลดโหลด แต่ยังรีเฟรชทันทีถ้ากำลังเปิดแท็บ Logs)
+                if (now - this.lastMetaFetchAt > 60000) { this.checkAppVersion(); this.lastMetaFetchAt = now; } // เอา fetchLast204Time() ออกจาก polling: เวลาอัปเดต 204 จะรีเฟรชเฉพาะตอน import จริงเท่านั้น
               }
             }, 15000);
             this.fetchDockStatus();
