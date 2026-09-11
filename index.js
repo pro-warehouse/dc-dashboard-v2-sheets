@@ -831,6 +831,42 @@ app.post('/api/wms-204/bulk', async (req, res) => {
   }
 });
 
+// ==========================================
+// 🩹 FIX: ฟังก์ชัน/ค่าคงที่ถูกเรียกใช้ตอนลบข้อมูล แต่ไม่เคยถูกประกาศไว้
+// (สาเหตุที่ปุ่มลบข้อมูลกดแล้ว error / เงียบ ๆ ไม่ทำงาน)
+// ==========================================
+const WAVES_HEADERS = [
+  'Wave_Number', 'Planned_Pick_Date', 'Planned_Pick_Time', 'Planned_Load_Date', 'Planned_Load_Time',
+  'Trip_No', 'Transporter', 'Vehicle_Type', 'Vehicle_Booking_No', 'Branch_Name', 'Branch_Code',
+  'Order_Number', 'Owner_Code', 'Order_Type', 'Is_HUB', 'Time_Change_Count', 'Total_Qty',
+  'Status_Allocate', 'User_Allocate', 'Time_Allocate',
+  'Status_Print', 'User_Print', 'Time_Print',
+  'Status_Pick', 'User_Pick', 'Picked_Complete_Timestamp',
+  'Status_Check', 'User_Check', 'QC_Complete_Timestamp',
+  'Status_Truck', 'User_Truck', 'Hist_Truck_Time',
+  'Status_Load', 'User_Load', 'Hist_Load_Time', 'Time_Load_Start', 'Dock_Door', 'License_Plate',
+  'Created_At', 'Imported_At', 'Is_Urgent'
+];
+
+function getWaveNumberNoZero(id) {
+  return standardizeWaveId(id);
+}
+
+async function writeSheet(sheetName, dataArray, headers) {
+  if (!isSheetsDbConfigured) return;
+  const values = [
+    headers,
+    ...dataArray.map(row => headers.map(h => (row[h] !== undefined && row[h] !== null) ? row[h] : ''))
+  ];
+  await sheets.spreadsheets.values.clear({ spreadsheetId: DB_SPREADSHEET_ID, range: `${sheetName}!A1:ZZ` });
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: DB_SPREADSHEET_ID,
+    range: `${sheetName}!A1`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values },
+  });
+}
+
 app.post('/api/waves/delete-id', async (req, res) => {
   await sheetLock.acquire();
   try {
