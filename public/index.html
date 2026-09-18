@@ -3359,6 +3359,30 @@ if (data.shifts) { this.settings.shifts = data.shifts; localStorage.setItem('dc_
           XLSX.writeFile(wb, 'Wave_Plan_Template.xlsx');
         },
 
+        expandMergedCells(worksheet) {
+          // 🩹 FIX: ไฟล์ Excel ที่มีการ Merge เซลล์ (เช่น Wave เดียวแต่มีหลายบรรทัดย่อย
+          // ที่คอลัมน์ Wave_Number/Vehicle_Booking_No/วันเวลา ถูก merge รวมกัน)
+          // SheetJS จะเก็บค่าไว้ที่เซลล์แรกของกลุ่มที่ merge เท่านั้น เซลล์อื่นในกลุ่ม
+          // เดียวกันจะอ่านได้ค่าว่าง ทำให้ import แล้วบางบรรทัดหลุดหายไป (ไม่มี Wave_Number
+          // ก็ถูกกรองออกที่ filter ด้านล่าง) ฟังก์ชันนี้เติมค่าของเซลล์แรกลงไปในทุกเซลล์
+          // ของช่วงที่ merge ก่อนแปลงเป็น JSON เพื่อไม่ให้ข้อมูลหายอีก
+          const merges = (worksheet && worksheet['!merges']) || [];
+          merges.forEach((range) => {
+            const startRef = XLSX.utils.encode_cell({ r: range.s.r, c: range.s.c });
+            const startCell = worksheet[startRef];
+            if (!startCell) return;
+            for (let R = range.s.r; R <= range.e.r; R++) {
+              for (let C = range.s.c; C <= range.e.c; C++) {
+                if (R === range.s.r && C === range.s.c) continue;
+                const ref = XLSX.utils.encode_cell({ r: R, c: C });
+                if (!worksheet[ref] || worksheet[ref].v === undefined || worksheet[ref].v === '') {
+                  worksheet[ref] = { ...startCell };
+                }
+              }
+            }
+          });
+        },
+
         handleExcelUpload(e) {
           const file = e.target.files[0];
           if (!file) return;
@@ -3370,7 +3394,9 @@ if (data.shifts) { this.settings.shifts = data.shifts; localStorage.setItem('dc_
               const data = new Uint8Array(evt.target.result);
               const workbook = XLSX.read(data, { type: 'array' });
               const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+              this.expandMergedCells(worksheet); // 🩹 FIX: เติมค่าเซลล์ที่ถูก merge ก่อนอ่านข้อมูล
               let jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: true }).filter((row) => Object.keys(row).length > 0 && (row['Wave_Number'] || row['เลขWave (Wave ID)']));
+              const totalRawRows = jsonData.length; // 🩹 FIX: เก็บจำนวนแถวตั้งต้นไว้เทียบว่ามีแถวถูกข้ามไปกี่แถว
               jsonData = jsonData.map((row) => {
                 let newRow = {};
                 Object.keys(row).forEach((key) => {
@@ -3399,12 +3425,22 @@ if (data.shifts) { this.settings.shifts = data.shifts; localStorage.setItem('dc_
                 return newRow;
               });
               jsonData = jsonData.filter((item) => item.Wave_Number);
+              const skippedRows = totalRawRows - jsonData.length; // 🩹 FIX: จำนวนแถวที่ไม่มี Wave_Number เลยและถูกข้ามไป
               if (jsonData.length === 0) { this.isLoading = false; Swal.fire({ title: 'ข้อผิดพลาด!', text: 'ไม่พบคอลัมน์ Wave_Number ในไฟล์ Excel โปรดตรวจสอบรูปแบบไฟล์', icon: 'warning' }); return; }
               fetch('/api/waves/bulk-insert', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(jsonData) }).then((res) => res.json()).then((res) => {
                 this.isLoading = false;
                 if (res.success) {
-                  const planSummary = res.plannedWavesUpdated > 0 ? ` อัปเดตแผนเวลา ${res.plannedWavesUpdated} Wave` : '';
-                  Swal.fire({ title: 'สำเร็จ!', text: `อัปโหลดแผนงานเรียบร้อย${planSummary}`, icon: 'success', timer: 3500, showConfirmButton: false });
+                  // 🩹 FIX: โชว์จำนวนแถวที่อัปเดต/เพิ่มใหม่/ข้ามจริง ๆ (ถ้า backend ส่งมาให้) เพื่อให้ตรวจสอบได้ว่าครบทุกแถวหรือไม่
+                  const detailParts = [];
+                  if (res.rowsUpdated !== undefined || res.rowsInserted !== undefined) {
+                    detailParts.push(`อัปเดต ${res.rowsUpdated || 0} แถว, เพิ่มใหม่ ${res.rowsInserted || 0} แถว`);
+                  } else if (res.plannedWavesUpdated > 0) {
+                    detailParts.push(`อัปเดตแผนเวลา ${res.plannedWavesUpdated} Wave`);
+                  }
+                  if (res.duplicateRowsSkipped) detailParts.push(`ข้ามซ้ำในไฟล์ ${res.duplicateRowsSkipped} แถว`);
+                  if (skippedRows > 0) detailParts.push(`ข้าม ${skippedRows} แถวที่ไม่มีเลข Wave`);
+                  const planSummary = detailParts.length ? ` (${detailParts.join(', ')})` : '';
+                  Swal.fire({ title: 'สำเร็จ!', text: `อัปโหลดแผนงานเรียบร้อย${planSummary}`, icon: 'success', timer: 4000, showConfirmButton: false });
                   setTimeout(() => { this.fetchDataFromDB(true); }, 1500);
                 } else Swal.fire('นำเข้าไม่สำเร็จ', res.message, 'error');
               }).catch((err) => { this.isLoading = false; Swal.fire('Error', String(err), 'error'); });
@@ -3424,6 +3460,7 @@ if (data.shifts) { this.settings.shifts = data.shifts; localStorage.setItem('dc_
               const data = new Uint8Array(evt.target.result);
               const workbook = XLSX.read(data, { type: 'array', raw: true });
               const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+              this.expandMergedCells(worksheet); // 🩹 FIX: เติมค่าเซลล์ที่ถูก merge ก่อนอ่านข้อมูล (กันแถวหายเหมือนไฟล์แผนงาน)
               const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
               if (jsonData.length < 2) { this.isLoading = false; return Swal.fire('ข้อผิดพลาด', 'ไม่มีข้อมูลแถวในไฟล์', 'warning'); }
               let headerRowIndex = -1;
