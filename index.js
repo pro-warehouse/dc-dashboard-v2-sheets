@@ -209,6 +209,50 @@ function standardizeWaveId(id) {
 }
 
 // ==========================================
+// 🩹 FIX: กุญแจระบุ "แถว" ที่ไม่ซ้ำกัน สำหรับตอน Import (bulk-insert)
+// เดิมระบบจับคู่แถวเดิม/แถวใหม่ด้วย "เลข Wave" อย่างเดียว แต่ 1 Wave
+// สามารถมีได้หลายแถวจริง ๆ (แยกหลายเที่ยวรถ/Vehicle_Booking_No ต่างกัน
+// หรือหลายออเดอร์ Order_Number ในทริปเดียวกัน — ดูฟังก์ชัน processDBData
+// และ getRawRowsPieces ในหน้าเว็บที่ group/sum ข้อมูลด้วยชุดคีย์เดียวกันนี้)
+// ถ้าจับคู่ด้วยเลข Wave อย่างเดียว ทุกบรรทัดที่ Wave เดียวกันจะไปทับแถว
+// เดียวกันในชีต ทำให้ข้อมูลของบรรทัดก่อนหน้าหายไป เหลือแค่บรรทัดสุดท้าย
+// ที่รอดทุกครั้งที่ import -> นี่คือสาเหตุที่ "ข้อมูลเข้าไม่ครบทุกบรรทัด"
+// ==========================================
+function makeWaveRowKey(waveNumber, bookingNo, orderNo) {
+  const wave = standardizeWaveId(waveNumber);
+  const booking = String(bookingNo || '').trim() || 'NO_BOOKING';
+  const order = String(orderNo || '').trim();
+  return order ? `${wave}_${booking}_${order}` : `${wave}_${booking}`;
+}
+
+// ==========================================
+// 🩹 FIX: แบ่งคำขอ batchUpdate เป็นชุดย่อย ๆ
+// Google Sheets API มีข้อจำกัดขนาด/เวลาของคำขอเดียว ถ้าส่ง data (จำนวน range
+// ที่จะอัปเดต) ทีเดียวมากเกินไปในไฟล์ import ที่มีหลายร้อย/พันแถว คำขออาจถูก
+// ปฏิเสธหรือ timeout ทั้งก้อน (แล้วทำให้ import ล้มเหลวทั้งหมดหรือสำเร็จแค่
+// บางส่วนโดยไม่มีข้อความเตือนที่ชัดเจน) การแบ่งเป็นชุดย่อยช่วยให้ทุกแถวถูก
+// เขียนจริงและเห็น error ได้ตรงจุดถ้ามีปัญหา
+// ==========================================
+const SHEETS_BATCH_CHUNK_SIZE = 300;
+
+function chunkArray(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+async function batchUpdateChunked(spreadsheetId, data, valueInputOption = 'USER_ENTERED') {
+  if (!data || data.length === 0) return;
+  const chunks = chunkArray(data, SHEETS_BATCH_CHUNK_SIZE);
+  for (const chunk of chunks) {
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId,
+      requestBody: { valueInputOption, data: chunk },
+    });
+  }
+}
+
+// ==========================================
 // 📊 Dashboard Summary On-Time Logic
 // ==========================================
 async function updateDashboardSummary(dbWaves) {
@@ -670,24 +714,34 @@ app.post('/api/waves/bulk-insert', async (req, res) => {
         return letter;
       };
 
+      // 🩹 FIX: จับคู่แถวเดิม/แถวใหม่ด้วย Wave_Number + Vehicle_Booking_No + Order_Number
+      // (ดูคำอธิบายเต็มที่ makeWaveRowKey ด้านบนไฟล์) แทนการใช้ Wave_Number เดี่ยว ๆ
+      const bookingIdx = headers.indexOf('Vehicle_Booking_No');
+      const orderIdx = headers.indexOf('Order_Number');
+
       const existingWaves = {};
       if (headers.length > 0) {
         const waveIdx = headers.indexOf('Wave_Number');
         rows.forEach((r, index) => {
           if (index > 0 && r[waveIdx]) {
-            existingWaves[standardizeWaveId(r[waveIdx])] = index + 1; 
+            const key = makeWaveRowKey(r[waveIdx], bookingIdx > -1 ? r[bookingIdx] : '', orderIdx > -1 ? r[orderIdx] : '');
+            existingWaves[key] = index + 1; 
           }
         });
       }
 
       const updateData = [];
       const newRowsToAdd = [];
+      const seenNewKeys = {}; // 🩹 กันไม่ให้บรรทัดคีย์ซ้ำกันในไฟล์เดียวกันถูกเพิ่มเป็นแถวใหม่หลายแถวซ้อนกัน
+      let matchedCount = 0;
+      let duplicateRowsInFile = 0;
 
       sheetData.forEach(row => {
-        const waveId = standardizeWaveId(row['Wave_Number']);
-        const existingRowIndex = existingWaves[waveId];
+        const rowKey = makeWaveRowKey(row['Wave_Number'], row['Vehicle_Booking_No'], row['Order_Number']);
+        const existingRowIndex = existingWaves[rowKey];
 
         if (existingRowIndex) {
+          matchedCount++;
           headers.forEach((header, i) => {
             const protectedColumns = [];
             
@@ -702,17 +756,18 @@ app.post('/api/waves/bulk-insert', async (req, res) => {
               });
             }
           });
+        } else if (seenNewKeys[rowKey]) {
+          duplicateRowsInFile++; // แถวคีย์ซ้ำกันเองในไฟล์ที่อัปโหลด (ไม่ใช่ในชีต) ข้ามเพื่อไม่ให้สร้างแถวซ้ำ
         } else {
+          seenNewKeys[rowKey] = true;
           const newRowData = headers.map(header => row[header] !== undefined && row[header] !== null ? String(row[header]) : '');
           newRowsToAdd.push(newRowData);
         }
       });
 
+      // 🩹 FIX: แบ่งส่งเป็นชุดย่อยผ่าน batchUpdateChunked กันคำขอใหญ่เกินไปจน Sheets API ปฏิเสธ/timeout
       if (updateData.length > 0) {
-        await sheets.spreadsheets.values.batchUpdate({
-          spreadsheetId: DB_SPREADSHEET_ID,
-          requestBody: { valueInputOption: 'USER_ENTERED', data: updateData },
-        });
+        await batchUpdateChunked(DB_SPREADSHEET_ID, updateData);
       }
 
       if (newRowsToAdd.length > 0) {
@@ -728,10 +783,21 @@ app.post('/api/waves/bulk-insert', async (req, res) => {
       await updateDashboardSummary(updatedWaves);
       await updateHourlyAllocation(updatedWaves);
       waveDataCache = null; 
+
+      // 🩹 FIX: ส่งจำนวนแถวที่อัปเดต/เพิ่มใหม่/ข้ามซ้ำกลับไปด้วย เพื่อให้ตรวจสอบได้ว่านำเข้าครบทุกแถวจริง
+      return res.json({
+        success: true,
+        plannedWavesUpdated: sheetData.length,
+        rowsUpdated: matchedCount,
+        rowsInserted: newRowsToAdd.length,
+        duplicateRowsSkipped: duplicateRowsInFile,
+        message: `นำเข้าสำเร็จ ${sheetData.length} แถว (อัปเดต ${matchedCount}, เพิ่มใหม่ ${newRowsToAdd.length}${duplicateRowsInFile ? `, ข้ามซ้ำในไฟล์ ${duplicateRowsInFile}` : ''})`
+      });
     }
 
     return res.json({ success: true, plannedWavesUpdated: sheetData.length, message: `นำเข้าสำเร็จ` });
   } catch (err) {
+    console.error('❌ นำเข้าแผนงานขัดข้อง:', err.message);
     return res.status(500).json({ success: false, message: err.message });
   } finally {
     sheetLock.release(); 
