@@ -203,9 +203,8 @@ async function saveSettingsToSheet() {
 
 function standardizeWaveId(id) {
   if (!id) return '';
-  const num = String(id).replace(/^WAVE-?/i, '').replace(/^W-?/i, '').replace(/^0+/, '');
-  const paddedNum = (num === '' ? '0' : num).padStart(10, '0');
-  return `Wave-${paddedNum}`;
+  const num = String(id).replace(/[^0-9]/g, '').replace(/^0+/, '');
+  return (num === '' ? '0' : num).padStart(10, '0');
 }
 
 // ==========================================
