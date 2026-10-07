@@ -283,7 +283,7 @@ async function updateHourlyAllocation(dbWaves) {
           agg[key] = { Date: dateStr, Hour: `${hourStr}:00`, DM02_Qty: 0, DP02_Qty: 0, Other_Qty: 0, Total_Qty: 0 };
         }
 
-        let qty = Number(w.WMS_204_Total_Qty) || Number(w.WMS_Total_Qty) || Number(w.Total_Qty) || 0;
+        let qty = Number(w.WMS_204_Allocated_Qty) || Number(w.WMS_Allocated_Qty) || Number(w.Allocated_Qty) || Number(w.WMS_204_Total_Qty) || Number(w.Total_Qty) || 0;
         let owner = String(w.Owner_Code || '').toUpperCase();
 
         if (owner.includes('DM02')) agg[key].DM02_Qty += qty;
@@ -674,7 +674,7 @@ const getColLetter = (colIndex) => {
 
       const updateData = [];
       const newRowsToAdd = [];
-      const processedWavesInExcel = new Set(); // ตัวจำว่า Wave นี้ดึงข้อมูลจาก Excel ไปแล้วหรือยัง
+      const processedWavesInExcel = new Set(); // ตัวจำว่า Wave+Order นี้ดึงข้อมูลจาก Excel ไปแล้วหรือยัง
 
       // ✅ 2. ตอนอ่านข้อมูลจาก Excel ก็ต้องอ้างอิงด้วย Wave + Order เช่นกัน
       sheetData.forEach(row => {
@@ -682,7 +682,7 @@ const getColLetter = (colIndex) => {
         const orderNo = String(row['Order_Number'] || '').trim();
         const uniqueKey = orderNo ? `${waveId}_${orderNo}` : waveId;
         
-        // 🔒 ดักไว้บนสุด: ถ้า Wave นี้โดนประมวลผลไปแล้ว ให้ข้ามบรรทัดนี้ใน Excel ไปเลย
+        // 🔒 ดักไว้บนสุด: ถ้า Wave+Order นี้โดนประมวลผลไปแล้ว ให้ข้ามบรรทัดนี้ใน Excel ไปเลย
         if (processedWavesInExcel.has(uniqueKey)) return;
         processedWavesInExcel.add(uniqueKey);
 
