@@ -670,39 +670,52 @@ app.post('/api/waves/bulk-insert', async (req, res) => {
         return letter;
       };
 
+      // ✅ เก็บค่า Row Index ทุกบรรทัดที่ตรงกับ Wave นั้นเป็น Array
       const existingWaves = {};
       if (headers.length > 0) {
         const waveIdx = headers.indexOf('Wave_Number');
         rows.forEach((r, index) => {
           if (index > 0 && r[waveIdx]) {
-            existingWaves[standardizeWaveId(r[waveIdx])] = index + 1; 
+            const wId = standardizeWaveId(r[waveIdx]);
+            if (!existingWaves[wId]) existingWaves[wId] = [];
+            existingWaves[wId].push(index + 1); 
           }
         });
       }
 
       const updateData = [];
       const newRowsToAdd = [];
+      const processedWavesInExcel = new Set(); // ตัวจำว่า Wave นี้ดึงข้อมูลจาก Excel ไปแล้วหรือยัง
 
       sheetData.forEach(row => {
         const waveId = standardizeWaveId(row['Wave_Number']);
-        const existingRowIndex = existingWaves[waveId];
+        
+        // 🔒 ดักไว้บนสุด: ถ้า Wave นี้โดนประมวลผลไปแล้ว ให้ข้ามบรรทัดนี้ใน Excel ไปเลย
+        if (processedWavesInExcel.has(waveId)) return;
+        processedWavesInExcel.add(waveId);
 
-        if (existingRowIndex) {
-          headers.forEach((header, i) => {
-            const protectedColumns = [];
-            
-            if (protectedColumns.includes(header) || header.startsWith('Status_') || header.startsWith('Time_') || header.startsWith('User_') || header.includes('Timestamp')) {
-              return; 
-            }
+        const existingRowIndices = existingWaves[waveId];
 
-            if (row[header] !== undefined && row[header] !== null) {
-              updateData.push({
-                range: `Wave_Monitoring!${getColLetter(i)}${existingRowIndex}`,
-                values: [[String(row[header])]]
-              });
-            }
+        if (existingRowIndices && existingRowIndices.length > 0) {
+          // กรณีมี Wave นี้ในฐานข้อมูลแล้ว -> วนอัปเดตให้ครบทุกบรรทัด
+          existingRowIndices.forEach(existingRowIndex => {
+            headers.forEach((header, i) => {
+              const protectedColumns = [];
+              
+              if (protectedColumns.includes(header) || header.startsWith('Status_') || header.startsWith('Time_') || header.startsWith('User_') || header.includes('Timestamp')) {
+                return; 
+              }
+
+              if (row[header] !== undefined && row[header] !== null) {
+                updateData.push({
+                  range: `Wave_Monitoring!${getColLetter(i)}${existingRowIndex}`,
+                  values: [[String(row[header])]]
+                });
+              }
+            });
           });
         } else {
+          // กรณีเป็น Wave ใหม่เอี่ยม -> สร้างบรรทัดใหม่แค่ 1 บรรทัดเท่านั้น
           const newRowData = headers.map(header => row[header] !== undefined && row[header] !== null ? String(row[header]) : '');
           newRowsToAdd.push(newRowData);
         }
