@@ -201,6 +201,7 @@ async function saveSettingsToSheet() {
   }
 }
 
+// 🟢 โชว์เฉพาะตัวเลข 10 หลัก
 function standardizeWaveId(id) {
   if (!id) return '';
   const num = String(id).replace(/[^0-9]/g, '').replace(/^0+/, '');
@@ -266,9 +267,15 @@ async function updateHourlyAllocation(dbWaves) {
   if (!isSheetsDbConfigured) return;
   try {
     const agg = {};
+    const processedWaves = new Set(); // 🟢 ป้องกัน 1 Wave บวกหลายออเดอร์
 
     dbWaves.forEach(w => {
       if (w.Status_Allocate === 'done' && w.Time_Allocate && w.Time_Allocate !== '-') {
+        
+        const waveId = standardizeWaveId(w.Wave_Number);
+        if (processedWaves.has(waveId)) return;
+        processedWaves.add(waveId);
+
         let tStr = String(w.Time_Allocate).trim().replace(' ', 'T');
         if (tStr.length === 19) tStr += '+07:00'; 
         
@@ -283,6 +290,7 @@ async function updateHourlyAllocation(dbWaves) {
           agg[key] = { Date: dateStr, Hour: `${hourStr}:00`, DM02_Qty: 0, DP02_Qty: 0, Other_Qty: 0, Total_Qty: 0 };
         }
 
+        // 🟢 ดึงยอด Allocated Qty มาคำนวณก่อน ถ้าไม่มีค่อยดึงยอด Total
         let qty = Number(w.WMS_204_Allocated_Qty) || Number(w.WMS_Allocated_Qty) || Number(w.Allocated_Qty) || Number(w.WMS_204_Total_Qty) || Number(w.Total_Qty) || 0;
         let owner = String(w.Owner_Code || '').toUpperCase();
 
@@ -329,7 +337,7 @@ app.get('/api/logs', async (req, res) => {
     let logs = rows.slice(1).map(row => ({
       ts: row[0] || '',
       user: row[1] || '',
-      waveId: row[2] || '',
+      waveId: standardizeWaveId(row[2] || ''), // 🟢 โชว์แค่ตัวเลข 10 หลักใน Logs
       action: row[3] || ''
     }));
     logs = logs.reverse().slice(0, 300); 
@@ -644,7 +652,23 @@ app.post('/api/settings/save', async (req, res) => {
   }
 });
 
-const getColLetter = (colIndex) => {
+// 🟢 แก้ไข bulk-insert ให้แยก Order และบังคับเติม 0
+app.post('/api/waves/bulk-insert', async (req, res) => {
+  await sheetLock.acquire(); 
+  try {
+    const sheetData = req.body; 
+    if (!sheetData || sheetData.length === 0) return res.status(400).json({ success: false, message: 'ไม่พบข้อมูล' });
+
+    if (isSheetsDbConfigured) {
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId: DB_SPREADSHEET_ID,
+        range: 'Wave_Monitoring!A:AT',
+      });
+      
+      const rows = response.data.values || [];
+      const headers = rows.length > 0 ? rows[0] : [];
+      
+      const getColLetter = (colIndex) => {
         let temp, letter = '';
         while (colIndex >= 0) {
           temp = colIndex % 26;
@@ -654,17 +678,16 @@ const getColLetter = (colIndex) => {
         return letter;
       };
 
-      // ✅ 1. เก็บค่า Row Index โดยใช้ Wave + Order Number เป็น Key หลัก
+      // 🟢 1. เก็บค่า Row Index โดยใช้ Wave + Order Number เป็น Key หลัก
       const existingWaves = {};
       if (headers.length > 0) {
         const waveIdx = headers.indexOf('Wave_Number');
-        const orderIdx = headers.indexOf('Order_Number'); // เพิ่มการเช็ค Order_Number
+        const orderIdx = headers.indexOf('Order_Number'); 
         
         rows.forEach((r, index) => {
           if (index > 0 && r[waveIdx]) {
             const wId = standardizeWaveId(r[waveIdx]);
             const orderNo = orderIdx > -1 ? String(r[orderIdx] || '').trim() : '';
-            // นำ Wave และ Order มารวมร่างกันเป็น Key เพื่อให้บรรทัดไม่ซ้ำกัน
             const uniqueKey = orderNo ? `${wId}_${orderNo}` : wId; 
             
             existingWaves[uniqueKey] = index + 1; 
@@ -674,15 +697,15 @@ const getColLetter = (colIndex) => {
 
       const updateData = [];
       const newRowsToAdd = [];
-      const processedWavesInExcel = new Set(); // ตัวจำว่า Wave+Order นี้ดึงข้อมูลจาก Excel ไปแล้วหรือยัง
+      const processedWavesInExcel = new Set(); 
 
-      // ✅ 2. ตอนอ่านข้อมูลจาก Excel ก็ต้องอ้างอิงด้วย Wave + Order เช่นกัน
+      // 🟢 2. อ่านข้อมูลจาก Excel
       sheetData.forEach(row => {
         const waveId = standardizeWaveId(row['Wave_Number']);
         const orderNo = String(row['Order_Number'] || '').trim();
         const uniqueKey = orderNo ? `${waveId}_${orderNo}` : waveId;
         
-        // 🔒 ดักไว้บนสุด: ถ้า Wave+Order นี้โดนประมวลผลไปแล้ว ให้ข้ามบรรทัดนี้ใน Excel ไปเลย
+        // 🔒 ดักไว้บนสุด: ถ้า Wave+Order นี้โดนประมวลผลไปแล้ว ให้ข้ามบรรทัดนี้ใน Excel
         if (processedWavesInExcel.has(uniqueKey)) return;
         processedWavesInExcel.add(uniqueKey);
 
@@ -698,18 +721,34 @@ const getColLetter = (colIndex) => {
             }
 
             if (row[header] !== undefined && row[header] !== null) {
+              let cellValue = String(row[header]);
+              // 🟢 បังคับเติม ' ให้ Google Sheets มองเป็น Text ป้องกันเลข 0 หาย
+              if (header === 'Wave_Number') {
+                  cellValue = "'" + standardizeWaveId(cellValue);
+              }
+
               updateData.push({
                 range: `Wave_Monitoring!${getColLetter(i)}${existingRowIndex}`,
-                values: [[String(row[header])]]
+                values: [[cellValue]]
               });
             }
           });
         } else {
           // ถ้าเป็นออเดอร์ใหม่ที่ไม่เคยมีในระบบ ให้สร้างบรรทัดใหม่
-          const newRowData = headers.map(header => row[header] !== undefined && row[header] !== null ? String(row[header]) : '');
+          const newRowData = headers.map(header => {
+            if (row[header] !== undefined && row[header] !== null) {
+                let cellValue = String(row[header]);
+                // 🟢 บังคับเติม ' ให้ Google Sheets มองเป็น Text ป้องกันเลข 0 หาย
+                if (header === 'Wave_Number') {
+                    cellValue = "'" + standardizeWaveId(cellValue);
+                }
+                return cellValue;
+            }
+            return '';
+          });
           newRowsToAdd.push(newRowData);
           
-          // ป้องกันการแอดข้อมูลซ้ำ หากในไฟล์ Excel บรรทัดล่างๆ มี Order นี้โผล่มาอีก
+          // ป้องกันการแอดข้อมูลซ้ำ
           existingWaves[uniqueKey] = rows.length + newRowsToAdd.length; 
         }
       });
