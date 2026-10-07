@@ -2072,10 +2072,12 @@
   
   <script>
     function standardizeWaveId(id) {
-      if (!id) return '';
-      const num = String(id).replace(/^WAVE-?/i, '').replace(/^W-?/i, '').replace(/^0+/, '');
-      return `Wave-${(num === '' ? '0' : num).padStart(10, '0')}`;
-    }
+  if (!id) return '';
+  // 1. ดึงมาเฉพาะตัวเลข และตัดเลข 0 ข้างหน้าออกก่อนเพื่อรีเซ็ตค่า
+  const num = String(id).replace(/[^0-9]/g, '').replace(/^0+/, '');
+  // 2. เติม 0 กลับเข้าไปด้านหน้าให้ครบ 10 หลักพอดี
+  return (num === '' ? '0' : num).padStart(10, '0');
+}
 
     function parseDateStrGlob(d, t) {
       let dateObj = null;
