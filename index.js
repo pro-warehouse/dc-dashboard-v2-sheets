@@ -644,59 +644,75 @@ app.post('/api/settings/save', async (req, res) => {
   }
 });
 
-// ✅ 1. เก็บค่า Row Index โดยใช้ Wave + Order Number เป็น Key หลัก
-  const existingWaves = {};
-  if (headers.length > 0) {
-    const waveIdx = headers.indexOf('Wave_Number');
-    const orderIdx = headers.indexOf('Order_Number'); // เพิ่มการเช็ค Order_Number
-    
-    rows.forEach((r, index) => {
-      if (index > 0 && r[waveIdx]) {
-        const wId = standardizeWaveId(r[waveIdx]);
-        const orderNo = orderIdx > -1 ? String(r[orderIdx] || '').trim() : '';
-        // นำ Wave และ Order มารวมร่างกันเป็น Key เพื่อให้บรรทัดไม่ซ้ำกัน
-        const uniqueKey = orderNo ? `${wId}_${orderNo}` : wId; 
-        
-        existingWaves[uniqueKey] = index + 1; 
-      }
-    });
-  }
-
-  const updateData = [];
-  const newRowsToAdd = [];
-
-  // ✅ 2. ตอนอ่านข้อมูลจาก Excel ก็ต้องอ้างอิงด้วย Wave + Order เช่นกัน
-  sheetData.forEach(row => {
-    const waveId = standardizeWaveId(row['Wave_Number']);
-    const orderNo = String(row['Order_Number'] || '').trim();
-    const uniqueKey = orderNo ? `${waveId}_${orderNo}` : waveId;
-
-    const existingRowIndex = existingWaves[uniqueKey];
-
-    if (existingRowIndex) {
-      headers.forEach((header, i) => {
-        const protectedColumns = [];
-        
-        if (protectedColumns.includes(header) || header.startsWith('Status_') || header.startsWith('Time_') || header.startsWith('User_') || header.includes('Timestamp')) {
-          return; 
+const getColLetter = (colIndex) => {
+        let temp, letter = '';
+        while (colIndex >= 0) {
+          temp = colIndex % 26;
+          letter = String.fromCharCode(temp + 65) + letter;
+          colIndex = (colIndex - temp) / 26 - 1;
         }
+        return letter;
+      };
 
-        if (row[header] !== undefined && row[header] !== null) {
-          updateData.push({
-            range: `Wave_Monitoring!${getColLetter(i)}${existingRowIndex}`,
-            values: [[String(row[header])]]
+      // ✅ 1. เก็บค่า Row Index โดยใช้ Wave + Order Number เป็น Key หลัก
+      const existingWaves = {};
+      if (headers.length > 0) {
+        const waveIdx = headers.indexOf('Wave_Number');
+        const orderIdx = headers.indexOf('Order_Number'); // เพิ่มการเช็ค Order_Number
+        
+        rows.forEach((r, index) => {
+          if (index > 0 && r[waveIdx]) {
+            const wId = standardizeWaveId(r[waveIdx]);
+            const orderNo = orderIdx > -1 ? String(r[orderIdx] || '').trim() : '';
+            // นำ Wave และ Order มารวมร่างกันเป็น Key เพื่อให้บรรทัดไม่ซ้ำกัน
+            const uniqueKey = orderNo ? `${wId}_${orderNo}` : wId; 
+            
+            existingWaves[uniqueKey] = index + 1; 
+          }
+        });
+      }
+
+      const updateData = [];
+      const newRowsToAdd = [];
+      const processedWavesInExcel = new Set(); // ตัวจำว่า Wave นี้ดึงข้อมูลจาก Excel ไปแล้วหรือยัง
+
+      // ✅ 2. ตอนอ่านข้อมูลจาก Excel ก็ต้องอ้างอิงด้วย Wave + Order เช่นกัน
+      sheetData.forEach(row => {
+        const waveId = standardizeWaveId(row['Wave_Number']);
+        const orderNo = String(row['Order_Number'] || '').trim();
+        const uniqueKey = orderNo ? `${waveId}_${orderNo}` : waveId;
+        
+        // 🔒 ดักไว้บนสุด: ถ้า Wave นี้โดนประมวลผลไปแล้ว ให้ข้ามบรรทัดนี้ใน Excel ไปเลย
+        if (processedWavesInExcel.has(uniqueKey)) return;
+        processedWavesInExcel.add(uniqueKey);
+
+        const existingRowIndex = existingWaves[uniqueKey];
+
+        if (existingRowIndex) {
+          // กรณีมี Wave + Order นี้ในฐานข้อมูลแล้ว -> อัปเดตข้อมูลบรรทัดเดิม
+          headers.forEach((header, i) => {
+            const protectedColumns = [];
+            
+            if (protectedColumns.includes(header) || header.startsWith('Status_') || header.startsWith('Time_') || header.startsWith('User_') || header.includes('Timestamp')) {
+              return; 
+            }
+
+            if (row[header] !== undefined && row[header] !== null) {
+              updateData.push({
+                range: `Wave_Monitoring!${getColLetter(i)}${existingRowIndex}`,
+                values: [[String(row[header])]]
+              });
+            }
           });
+        } else {
+          // ถ้าเป็นออเดอร์ใหม่ที่ไม่เคยมีในระบบ ให้สร้างบรรทัดใหม่
+          const newRowData = headers.map(header => row[header] !== undefined && row[header] !== null ? String(row[header]) : '');
+          newRowsToAdd.push(newRowData);
+          
+          // ป้องกันการแอดข้อมูลซ้ำ หากในไฟล์ Excel บรรทัดล่างๆ มี Order นี้โผล่มาอีก
+          existingWaves[uniqueKey] = rows.length + newRowsToAdd.length; 
         }
       });
-    } else {
-      // ถ้าเป็นออเดอร์ใหม่ที่ไม่เคยมีในระบบ ให้สร้างบรรทัดใหม่
-      const newRowData = headers.map(header => row[header] !== undefined && row[header] !== null ? String(row[header]) : '');
-      newRowsToAdd.push(newRowData);
-      
-      // ป้องกันการแอดข้อมูลซ้ำ หากในไฟล์ Excel บรรทัดล่างๆ มี Order นี้โผล่มาอีก
-      existingWaves[uniqueKey] = rows.length + newRowsToAdd.length; 
-    }
-  });
 
       if (updateData.length > 0) {
         await sheets.spreadsheets.values.batchUpdate({
