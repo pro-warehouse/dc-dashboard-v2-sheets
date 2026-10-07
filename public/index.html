@@ -2827,9 +2827,9 @@ if (data.shifts) { this.settings.shifts = data.shifts; localStorage.setItem('dc_
             let rawDbStatus = this.getVal(row, [def.col]);
             let status = this.normalizeStepStatus(rawDbStatus || 'pending');
 
-            const recentRevert = false;
-            const localStatusFresh = false;
-            if (localStorage.getItem(`wave_${waveKey}_${def.key}_status`)) this.clearLocalStepState(waveKey, def.key);
+            const localStatus = localStorage.getItem(`wave_${waveKey}_${def.key}_status`);
+const recentRevert = localStatus === 'reverted';
+const localStatusFresh = this.isLocalStepFresh(waveKey, def.key);
 
             let rawTimeString = null;
             if (def.key === 'allocate') rawTimeString = this.getVal(row, ['Time_Allocate', 'Allocate_Time']);
